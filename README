@@ -1,0 +1,8 @@
+Description:
+	Simple PyGTK utility to converting video to msmpeg4 format with subtitles embedding
+
+Dependencies:
+	Python 2.7
+	GTK+ 2.24
+	PyGTK 2.24
+	mencoder
