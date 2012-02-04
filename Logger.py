@@ -1,19 +1,21 @@
 # -*- coding: utf8 -*-
 
-import datetime
+#TODO: pozdeji prepracovat vsechny moduly, aby pouzivali nativni implementaci
 
-class Logger(object):
-    def __init__(self, filepath):
-        self.file = open(filepath, 'w')
+import logging
 
-    def writeLines(self, message):
-        lines = message.split('\n')
-        for line in lines:
-            self.file.write('[' + str(datetime.datetime.now()) + ']\t' + line + '\n')
+logging.basicConfig(filename='VideoConvertor.log',level=logging.DEBUG)
 
-    def close(self):
-        if not self.file.closed:
-            self.file.close()
+def writeLines(message):
+  if message is list:
+      message = '\n'.join(message)
+  debug(message)
 
-    def __del__(self):
-        self.close()
+def debug(msg):
+  logging.debug(msg)
+
+def info(msg):
+  logging.info(msg)
+
+def warning(msg):
+  logging.warning(msg)
