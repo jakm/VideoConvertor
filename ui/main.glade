@@ -6,21 +6,6 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-add</property>
   </object>
-  <object class="GtkImage" id="down_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-go-down</property>
-  </object>
-  <object class="GtkListStore" id="files_liststore">
-    <columns>
-      <!-- column-name file_path -->
-      <column type="gchararray"/>
-      <!-- column-name sub_path -->
-      <column type="gchararray"/>
-      <!-- column-name has_sub -->
-      <column type="gboolean"/>
-    </columns>
-  </object>
   <object class="GtkImage" id="pause_image">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -36,15 +21,24 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-remove</property>
   </object>
-  <object class="GtkImage" id="stop_image">
+  <object class="GtkImage" id="down_image">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="stock">gtk-media-stop</property>
+    <property name="stock">gtk-go-down</property>
   </object>
-  <object class="GtkImage" id="up_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-go-up</property>
+  <object class="GtkListStore" id="files_liststore">
+    <columns>
+      <!-- column-name file_path -->
+      <column type="gchararray"/>
+      <!-- column-name sub_path -->
+      <column type="gchararray"/>
+      <!-- column-name has_sub -->
+      <column type="gboolean"/>
+      <!-- column-name subpix_id -->
+      <column type="gint"/>
+      <!-- column-name spinner_running -->
+      <column type="gint"/>
+    </columns>
   </object>
   <object class="GtkWindow" id="main">
     <property name="width_request">600</property>
@@ -73,6 +67,9 @@
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
                     <property name="model">files_liststore</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection" id="treeview-selection1"/>
+                    </child>
                     <child>
                       <object class="GtkTreeViewColumn" id="file_column">
                         <property name="resizable">True</property>
@@ -84,9 +81,17 @@
                           </attributes>
                         </child>
                         <child>
-                          <object class="GtkCellRendererToggle" id="sub_view"/>
+                          <object class="GtkCellRendererPixbuf" id="subpix_view"/>
                           <attributes>
-                            <attribute name="active">2</attribute>
+                            <attribute name="visible">2</attribute>
+                            <attribute name="stock-id">3</attribute>
+                          </attributes>
+                        </child>
+                        <child>
+                          <object class="GtkCellRendererSpinner" id="spinner_view"/>
+                          <attributes>
+                            <attribute name="visible">4</attribute>
+                            <attribute name="active">4</attribute>
                           </attributes>
                         </child>
                       </object>
@@ -281,18 +286,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <child>
-                  <object class="GtkSpinner" id="spinner">
-                    <property name="width_request">30</property>
-                    <property name="height_request">30</property>
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="halign">start</property>
-                  </object>
-                  <packing>
-                    <property name="expand">True</property>
-                    <property name="fill">True</property>
-                    <property name="position">0</property>
-                  </packing>
+                  <placeholder/>
                 </child>
                 <child>
                   <object class="GtkButton" id="pause_button">
@@ -341,5 +335,20 @@
         </child>
       </object>
     </child>
+  </object>
+  <object class="GtkImage" id="stop_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-stop</property>
+  </object>
+  <object class="GtkImage" id="subpix_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-select-font</property>
+  </object>
+  <object class="GtkImage" id="up_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-go-up</property>
   </object>
 </interface>
