@@ -19,11 +19,28 @@
       <column type="gchararray"/>
       <!-- column-name has_sub -->
       <column type="gboolean"/>
-      <!-- column-name subpix_id -->
-      <column type="gint"/>
-      <!-- column-name spinner_running -->
-      <column type="gint"/>
+      <!-- column-name subpix -->
+      <column type="GdkPixbuf"/>
+      <!-- column-name running -->
+      <column type="gboolean"/>
     </columns>
+    <signal name="row-deleted" handler="on_files_liststore_row_deleted" swapped="no"/>
+    <signal name="row-inserted" handler="on_files_liststore_row_inserted" swapped="no"/>
+  </object>
+  <object class="GtkImage" id="pause_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-pause</property>
+  </object>
+  <object class="GtkImage" id="play_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-play</property>
+  </object>
+  <object class="GtkImage" id="remove_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-remove</property>
   </object>
   <object class="GtkWindow" id="main_window">
     <property name="width_request">600</property>
@@ -43,7 +60,6 @@
               <object class="GtkScrolledWindow" id="scrolledwindow1">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="hscrollbar_policy">never</property>
                 <property name="shadow_type">in</property>
                 <child>
                   <object class="GtkTreeView" id="files_treeview">
@@ -68,7 +84,7 @@
                           <object class="GtkCellRendererPixbuf" id="subpix_view"/>
                           <attributes>
                             <attribute name="visible">2</attribute>
-                            <attribute name="stock-id">3</attribute>
+                            <attribute name="pixbuf">3</attribute>
                           </attributes>
                         </child>
                         <child>
@@ -265,14 +281,24 @@
             </child>
             <child>
               <object class="GtkHBox" id="box7">
+                <property name="width_request">240</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <child>
-                  <placeholder/>
+                  <object class="GtkFixed" id="fixed1">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
                 </child>
                 <child>
                   <object class="GtkButton" id="pause_button">
                     <property name="label" translatable="yes">Pauza</property>
+                    <property name="width_request">80</property>
                     <property name="visible">True</property>
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
@@ -288,7 +314,7 @@
                 <child>
                   <object class="GtkButton" id="start_stop_button">
                     <property name="label" translatable="yes">Spustit</property>
-                    <property name="width_request">60</property>
+                    <property name="width_request">80</property>
                     <property name="visible">True</property>
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
@@ -317,21 +343,6 @@
         </child>
       </object>
     </child>
-  </object>
-  <object class="GtkImage" id="pause_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-pause</property>
-  </object>
-  <object class="GtkImage" id="play_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-play</property>
-  </object>
-  <object class="GtkImage" id="remove_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-remove</property>
   </object>
   <object class="GtkImage" id="stop_image">
     <property name="visible">True</property>

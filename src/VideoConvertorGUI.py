@@ -19,15 +19,17 @@ from twisted.internet import defer, reactor
 
 class VideoConvertorGUI(object):
     def __init__(self):
-        logging.basicConfig(file='convertor.log')
+        #logging.basicConfig(file='convertor.log')
+        logging.basicConfig(level=logging.DEBUG)
 
         self.logger = logging.getLogger(__name__)
 
         builder = gtk.Builder()
         builder.add_from_file('ui/main.glade')
 
-        signals = {
-            'on_add_file_button_clicked': self.on_add_file_button_clicked}
+        signals = {'on_add_file_button_clicked': self.on_add_file_button_clicked,
+                   'on_files_liststore_row_inserted': self.on_files_liststore_row_inserted,
+                   'on_files_liststore_row_deleted': self.on_files_liststore_row_deleted}
         builder.connect_signals(signals)
 
         self._set_widget_objects(builder)
@@ -37,10 +39,11 @@ class VideoConvertorGUI(object):
 
     def _set_widget_objects(self, builder):
         widgets = ('add_file_button', 'remove_file_button', 'up_button',
-                   'down_button', 'files_treeview', 'subtitles_entry',
-                   'add_subtitles_button', 'remove_subtitles_button',
-                   'pause_button', 'start_stop_button', 'play_image',
-                   'stop_image', 'subpix_image', 'main_window')
+                   'down_button', 'files_treeview', 'files_liststore',
+                   'subtitles_entry', 'add_subtitles_button',
+                   'remove_subtitles_button', 'pause_button',
+                   'start_stop_button', 'play_image', 'stop_image',
+                   'subpix_image', 'main_window')
         go = builder.get_object
         for widget_name in widgets:
             setattr(self, widget_name, go(widget_name))
@@ -62,16 +65,8 @@ class VideoConvertorGUI(object):
         file_names = self.open_file_chooser_dialog('Video soubory ...',
                                                    filters=(filter_,))
 
-        print file_names
-
-        # TODO: ### toto by asi melo reagovat na vlozeni do treeview ###
-        self.remove_file_button.set_sensitive(True)
-        self.up_button.set_sensitive(True)
-        self.down_button.set_sensitive(True)
-        self.add_subtitles_button.set_sensitive(True)
-        self.remove_subtitles_button.set_sensitive(True)
-        self.start_stop_button.set_sensitive(True)
-        # ### ... ###
+        for file_name in file_names:
+            self.add_file_name(file_name)
 
     def open_file_chooser_dialog(self, title, filters=(), select_multiple=True):
         buttons = (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
@@ -83,7 +78,6 @@ class VideoConvertorGUI(object):
                                        buttons=buttons,
                                        backend=None)
         dialog.set_default_response(gtk.RESPONSE_OK)
-        dialog.set_current_folder(os.path.expanduser('~'))
         dialog.set_select_multiple(select_multiple)
         for filter_ in filters:
             dialog.set_filter(filter_)
@@ -93,10 +87,43 @@ class VideoConvertorGUI(object):
             if response == gtk.RESPONSE_CANCEL:
                 return []
 
-            file_names = dialog.get_filenames() # TODO: decode ???
+            file_names = dialog.get_filenames()
             return file_names
         finally:
             dialog.destroy()
+
+    def add_file_name(self, file_name):
+        self.logger.debug('Appending file: %s', file_name)
+
+        pixbuf = self.get_image_pixbuf('gtk-select-font')
+
+        datarow = (file_name, '', False, pixbuf, False)
+        self.files_liststore.append(datarow)
+
+    def get_image_pixbuf(self, stock_id):
+        image = gtk.Image()
+        pixbuf = image.render_icon(stock_id, gtk.ICON_SIZE_BUTTON)
+        return pixbuf
+
+    def on_files_liststore_row_inserted(self, widget, *data):
+        if self.have_file_names():
+            self.set_controls_sensitive(True)
+
+    def on_files_liststore_row_deleted(self, widget, *data):
+        if not self.have_file_names():
+            self.set_controls_sensitive(False)
+
+    def have_file_names(self):
+        return self.files_liststore.get_iter_first() != None
+
+    def set_controls_sensitive(self, sensitive):
+        self.files_treeview.set_sensitive(sensitive)
+        self.remove_file_button.set_sensitive(sensitive)
+        self.up_button.set_sensitive(sensitive)
+        self.down_button.set_sensitive(sensitive)
+        self.add_subtitles_button.set_sensitive(sensitive)
+        self.remove_subtitles_button.set_sensitive(sensitive)
+        self.start_stop_button.set_sensitive(sensitive)
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(sys.argv[0]))
