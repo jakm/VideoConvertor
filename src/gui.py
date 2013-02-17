@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf8 -*-
 
 import pygtk
@@ -14,22 +13,29 @@ import sys
 
 from twisted.internet import defer, reactor
 
-#import VideoConvertor
+#import video_convertor
+from utils import get_install_dir, setup_logging
 
 
 class VideoConvertorGUI(object):
     def __init__(self):
-        #logging.basicConfig(file='convertor.log')
-        logging.basicConfig(level=logging.DEBUG)
+        setup_logging()
 
         self.logger = logging.getLogger(__name__)
 
+        self.processes = set()
+
+        self._init_ui()
+
+    def _init_ui(self):
         builder = gtk.Builder()
-        builder.add_from_file('ui/main.glade')
+        ui_file = os.path.join(get_install_dir(), 'ui', 'main.glade')
+        builder.add_from_file(ui_file)
 
         signals = {'on_add_file_button_clicked': self.on_add_file_button_clicked,
                    'on_files_liststore_row_inserted': self.on_files_liststore_row_inserted,
-                   'on_files_liststore_row_deleted': self.on_files_liststore_row_deleted}
+                   'on_files_liststore_row_deleted': self.on_files_liststore_row_deleted,
+                   'on_start_stop_button_clicked': self.on_start_stop_button_clicked}
         builder.connect_signals(signals)
 
         self._set_widget_objects(builder)
@@ -125,8 +131,5 @@ class VideoConvertorGUI(object):
         self.remove_subtitles_button.set_sensitive(sensitive)
         self.start_stop_button.set_sensitive(sensitive)
 
-if __name__ == '__main__':
-    os.chdir(os.path.dirname(sys.argv[0]))
-
-    gui = VideoConvertorGUI()
-    gui.main()
+    def on_start_stop_button_clicked(self, widget, *data):
+        pass

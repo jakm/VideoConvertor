@@ -4,5 +4,6 @@
 from gui import VideoConvertorGUI
 
 if __name__ == '__main__':
+
     gui = VideoConvertorGUI()
     gui.main()
