@@ -11,7 +11,32 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-go-down</property>
   </object>
-  <object class="GtkListStore" id="files_liststore">
+  <object class="GtkImage" id="pause_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-pause</property>
+  </object>
+  <object class="GtkImage" id="play_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-play</property>
+  </object>
+  <object class="GtkImage" id="remove_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-remove</property>
+  </object>
+  <object class="GtkImage" id="stop_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-stop</property>
+  </object>
+  <object class="GtkImage" id="subpix_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-select-font</property>
+  </object>
+  <object class="GtkListStore" id="tasks_liststore">
     <columns>
       <!-- column-name file_path -->
       <column type="gchararray"/>
@@ -26,6 +51,11 @@
     </columns>
     <signal name="row-deleted" handler="on_files_liststore_row_deleted" swapped="no"/>
     <signal name="row-inserted" handler="on_files_liststore_row_inserted" swapped="no"/>
+  </object>
+  <object class="GtkImage" id="up_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-go-up</property>
   </object>
   <object class="GtkWindow" id="main_window">
     <property name="width_request">600</property>
@@ -51,7 +81,7 @@
                     <property name="visible">True</property>
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
-                    <property name="model">files_liststore</property>
+                    <property name="model">tasks_liststore</property>
                     <child internal-child="selection">
                       <object class="GtkTreeSelection" id="treeview-selection1"/>
                     </child>
@@ -332,35 +362,5 @@
         </child>
       </object>
     </child>
-  </object>
-  <object class="GtkImage" id="pause_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-pause</property>
-  </object>
-  <object class="GtkImage" id="play_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-play</property>
-  </object>
-  <object class="GtkImage" id="remove_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-remove</property>
-  </object>
-  <object class="GtkImage" id="stop_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-stop</property>
-  </object>
-  <object class="GtkImage" id="subpix_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-select-font</property>
-  </object>
-  <object class="GtkImage" id="up_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-go-up</property>
   </object>
 </interface>
