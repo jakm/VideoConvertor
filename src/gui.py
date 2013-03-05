@@ -9,13 +9,13 @@ gtk2reactor.install()
 
 import logging
 import os.path
-import sys
 
 from twisted.internet import defer, reactor
+from twisted.python import failure
 
-from utils import get_install_dir, setup_logging
 from config import Configuration
-#from video_convertor import VideoConvertor
+from utils import get_install_dir, setup_logging
+from process import ConversionProcess
 
 
 class Task(object):
@@ -33,7 +33,7 @@ class VideoConvertorGUI(object):
     def __init__(self):
         setup_logging()
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         self.processes = set()
         self.conversion_running = False
@@ -65,8 +65,9 @@ class VideoConvertorGUI(object):
                    'down_button', 'files_treeview', 'tasks_liststore',
                    'subtitles_entry', 'add_subtitles_button',
                    'remove_subtitles_button', 'pause_button',
-                   'start_stop_button', 'play_image', 'stop_image',
-                   'subpix_image', 'main_window')
+                   'start_stop_button', 'pause_button', 'spinner',
+                   'play_image', 'stop_image', 'subpix_image',
+                   'main_window')
         go = builder.get_object
         for widget_name in widgets:
             setattr(self, widget_name, go(widget_name))
@@ -130,48 +131,63 @@ class VideoConvertorGUI(object):
 
     def on_files_liststore_row_inserted(self, widget, *data):
         if self.have_file_names():
-            self.set_controls_sensitive(True)
+            self.set_file_in_queue(True)
 
     def on_files_liststore_row_deleted(self, widget, *data):
         if not self.have_file_names():
-            self.set_controls_sensitive(False)
+            self.set_file_in_queue(False)
 
     def have_file_names(self):
         return (self.tasks_liststore.get_iter_first() is not None)
 
-    def set_controls_sensitive(self, sensitive):
-        self.files_treeview.set_sensitive(sensitive)
-        self.remove_file_button.set_sensitive(sensitive)
-        self.up_button.set_sensitive(sensitive)
-        self.down_button.set_sensitive(sensitive)
-        self.add_subtitles_button.set_sensitive(sensitive)
-        self.remove_subtitles_button.set_sensitive(sensitive)
-        self.start_stop_button.set_sensitive(sensitive)
+    def set_file_in_queue(self, file_in_queue):
+        self.files_treeview.set_sensitive(file_in_queue)
+        self.remove_file_button.set_sensitive(file_in_queue)
+        self.up_button.set_sensitive(file_in_queue)
+        self.down_button.set_sensitive(file_in_queue)
+        self.add_subtitles_button.set_sensitive(file_in_queue)
+        self.remove_subtitles_button.set_sensitive(file_in_queue)
+
+    @defer.inlineCallbacks
+    def set_conversion_running(self, conversion_running):
+        self.conversion_running = conversion_running
+
+        if conversion_running:
+            yield self.spinner.start()
+        else:
+            yield self.spinner.stop()
+
+        image = (self.stop_image if conversion_running else self.play_image)
+        self.start_stop_button.set_image(image)
+        text = ('Zastavit' if conversion_running else 'Spustit')
+        self.start_stop_button.set_label(text)
+        self.start_stop_button.set_sensitive(conversion_running)
+        self.pause_button.set_sensitive(conversion_running)
 
     @defer.inlineCallbacks
     def on_start_stop_button_clicked(self, widget, *data):
         if not self.conversion_running:
+            if not self.any_task_exists():
+                self.show_info_dialog('Není naplánována žádná úloha')
+                return
+
             self.logger.debug('Starting conversion')
-            # TODO: zmena ikonky
-            # TODO: kontrola tasku
             yield self.start_conversion()
-            # TODO: info o ukonceni
-            if self.tasks_failed:
-                msg = ('Úspěšně dokončeno %d úloh, %d selhalo:\n'
-                       % (len(self.tasks_done), len(self.tasks_failed)))
-                msg += '\n'.join([task.input_file for task in self.tasks_failed])
-                self.show_error_dialog(msg)
-                # TODO: zalogovani chyb (task.process.returncode, ...stderr)
-            else:
-                msg = 'Úspěšně dokončeno %d úloh.' % len(self.tasks_done)
-                self.show_info_dialog(msg)
         else:
             self.logger.debug('Stopping conversion')
-            yield defer.succeed(self.cancel_conversion)
+            yield defer.succeed(self.cancel_conversion())
 
-        # TODO: zmena ikonky
-
+    @defer.inlineCallbacks
     def start_conversion(self):
+        try:
+            yield self.set_conversion_running(True)
+
+            yield self.schedule_tasks()
+
+        finally:
+            yield self.set_conversion_running(False)
+
+    def schedule_tasks(self):
         if self.any_task_exists():
             processes_count = self.config.getint('processes', 'count')
             self.logger.debug('Count of processes to run: %s', processes_count)
@@ -194,9 +210,13 @@ class VideoConvertorGUI(object):
     def cancel_conversion(self):
         self.remove_all_tasks()
 
-        for process in self.processes:
-            self.logger.debug('Terminating: %s', process)
-            process.terminate() # TODO: mel by cancelovat i deferredy
+        while True:
+            try:
+                process = self.processes.pop()
+                self.logger.debug('Terminating: %s', process)
+                process.terminate()
+            except KeyError:
+                break
 
     def start_process(self):
         if self.any_task_exists():
@@ -206,25 +226,9 @@ class VideoConvertorGUI(object):
             if task is None:
                 return
 
-            # >>> TEST
-
-            from mock import MagicMock
-
-            _deferred = defer.Deferred()
-
-            process = MagicMock()
-            process.run.return_value = _deferred
-            process.deferred = _deferred
-            process.terminate.return_value = None
-
-            #_deferred.callback(0)
-            _deferred.errback(ValueError('fail'))
-
-            # >>> TEST
-
-            # process = VideoConvertor(task.input_file,
-            #                          task.sub_file,
-            #                          task.output_file)
+            process = ConversionProcess(task.input_file,
+                                        task.sub_file,
+                                        task.output_file)
 
             self.logger.info('Created new process object: %s', process)
 
@@ -235,8 +239,6 @@ class VideoConvertorGUI(object):
 
             self.set_task_started(task)
 
-            process.deferred.addCallback(self.set_task_done, task)
-            process.deferred.addErrback(self.set_task_failed, task)
             process.deferred.addBoth(self.task_finished, task)
             process.deferred.addBoth(lambda _: self.processes.remove(process))
             process.deferred.addBoth(lambda _: self.start_process())
@@ -244,17 +246,10 @@ class VideoConvertorGUI(object):
             return process.deferred
 
     def any_task_exists(self):
-        return (self.tasks_liststore.get_iter_first() is not None)
+        return (self.get_iter_not_running() is not None)
 
     def get_top_task(self):
-        # FIXME: napromazava se queue
-
-        tree_iter = self.tasks_liststore.get_iter_first()
-
-        is_running = lambda it: (self._get_value(it, 'running') is True)
-
-        while tree_iter is not None and is_running(tree_iter):
-            tree_iter = self.tasks_liststore.iter_next(tree_iter)
+        tree_iter = self.get_iter_not_running()
 
         if tree_iter is None:
             return None
@@ -273,29 +268,40 @@ class VideoConvertorGUI(object):
 
         return task
 
+    def get_iter_not_running(self):
+        is_running = lambda it: (self._get_value(it, 'running') is True)
+
+        tree_iter = self.tasks_liststore.get_iter_first()
+        while tree_iter is not None and is_running(tree_iter):
+            tree_iter = self.tasks_liststore.iter_next(tree_iter)
+
+        if tree_iter is None:
+            return None
+
+        return tree_iter
+
     def set_task_started(self, task):
         self._set_value(task.tree_iter, 'running', True)
 
-    def set_task_done(self, result, task):
-        self.logger.info('Task done: %s', task)
-        self.tasks_done.append(task)
-
-        return result
-
-    def set_task_failed(self, failure, task):
-        # TODO: zachytit t.i.d.CancelledError, nesmi se zobrazovat v logu
-
-        self.logger.info('Task failed: %s Error: %s', task, failure)
-        self.tasks_failed.append(task)
-
-        return failure
-
     def task_finished(self, result, task):
-        self.logger.debug('Task finished: %s', task)
 
-        tree_iter = task.tree_iter
-        self._set_value(tree_iter, 'running', False)
-        self.tasks_liststore.remove(tree_iter)
+        cancelled = (isinstance(result, failure.Failure)
+                     and isinstance(result.value, defer.CancelledError))
+        if cancelled:
+            self.logger.debug('Task cancelled: %s', task)
+            return None
+
+        returncode = task.process.returncode
+        self.logger.info('Task %s finished with return code: %s', task,
+                         returncode)
+
+        if returncode == 0:
+            self.tasks_done.append(task)
+        else:
+            # TODO: pro stderr samostatny log soubor
+            self.tasks_failed.append(task)
+
+        self.tasks_liststore.remove(task.tree_iter)
 
         return result
 
@@ -318,6 +324,16 @@ class VideoConvertorGUI(object):
             return '.'.join(elements[0:-1] + ['NEW'] + elements[-1:])
         else:
             return '.'.join(elements + ['NEW'])
+
+    def show_report_and_log_errors(self):
+        if self.tasks_failed:
+            msg = ('Úspěšně dokončeno %d úloh, %d selhalo:\n'
+                   % (len(self.tasks_done), len(self.tasks_failed)))
+            msg += '\n'.join([task.input_file for task in self.tasks_failed])
+            self.show_error_dialog(msg)
+        else:
+            msg = 'Úspěšně dokončeno %d úloh.' % len(self.tasks_done)
+            self.show_info_dialog(msg)
 
     def show_info_dialog(self, message):
         dialog = gtk.MessageDialog(self.main_window,
