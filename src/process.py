@@ -25,6 +25,7 @@ class ConversionProcess():
 
         self.started = False
         self.finished = False
+        self.paused = False
         self.cancelled = False
         self.deferred = defer.Deferred()
         self.deferred.addErrback(self.process_exited)
@@ -65,6 +66,31 @@ class ConversionProcess():
             return  # process already exited, so it was callbacked
 
         self.deferred.cancel()
+
+    def pause(self):
+        assert self.started
+        assert not self.finished
+        assert not self.paused
+
+        p = self._get_psutil_process()
+        if p:
+            p.suspend()
+            self.paused = True
+        else:
+            self.logger.debug('psutil process is None')
+
+    def resume(self):
+        assert self.started
+        assert not self.finished
+        assert self.paused
+
+        self.paused = False
+
+        p = self._get_psutil_process()
+        if p:
+            p.resume()
+        else:
+            self.logger.debug('psutil process is None')
 
     def get_conversion_command(self):
         input_file_alias = self.config.get('command', 'input_file_alias')
@@ -122,3 +148,9 @@ class ConversionProcess():
             self.stderr = buff.decode(encoding)
         finally:
             self.stderr_log.close()
+
+    def _get_psutil_process(self):
+        # psutil provides cross-platform process stop & cont orders
+        import psutil
+        p = psutil.Process(self.pid)
+        return (None if p.status in (psutil.STATUS_DEAD, psutil.STATUS_ZOMBIE) else p)
