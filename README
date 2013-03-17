@@ -5,4 +5,5 @@ Dependencies:
 	Python 2.7
 	GTK+ 2.24
 	PyGTK 2.24
+	psutil 0.6.1
 	mencoder
