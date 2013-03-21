@@ -37,6 +37,7 @@ class VideoConvertorGUI(object):
 
         self.processes = set()
         self.conversion_running = False
+        self.conversion_paused = False
         self.tasks_done = []
         self.tasks_failed = []
 
@@ -54,7 +55,8 @@ class VideoConvertorGUI(object):
                    'on_files_liststore_row_deleted': self.on_files_liststore_row_deleted,
                    'on_files_treeview_cursor_changed': self.on_files_treeview_cursor_changed,
                    'on_remove_file_button_clicked': self.on_remove_file_button_clicked,
-                   'on_start_stop_button_clicked': self.on_start_stop_button_clicked}
+                   'on_start_stop_button_clicked': self.on_start_stop_button_clicked,
+                   'on_pause_button_clicked': self.on_pause_button_clicked}
         builder.connect_signals(signals)
 
         self._set_widget_objects(builder)
@@ -66,7 +68,7 @@ class VideoConvertorGUI(object):
         widgets = ('add_file_button', 'remove_file_button', 'up_button',
                    'down_button', 'files_treeview', 'tasks_liststore',
                    'subtitles_entry', 'add_subtitles_button',
-                   'remove_subtitles_button', 'pause_button',
+                   'remove_subtitles_button',
                    'start_stop_button', 'pause_button', 'spinner',
                    'play_image', 'stop_image', 'subpix_image',
                    'main_window')
@@ -143,12 +145,14 @@ class VideoConvertorGUI(object):
     def on_files_treeview_cursor_changed(self, widget, *data):
         self.logger.debug('Cursor changed')
         tree_iters = self.get_selected_rows_iters()
+        self.logger.debug('current cursor: %s', self.files_treeview.get_cursor())
+        self.logger.debug('tree_iters: %s', tree_iters)
         if tree_iters is None:
             self.set_rows_selected(False)
         else:
             any_running = any([self._get_value(tree_iter, 'running')
                                for tree_iter in tree_iters])
-
+            self.logger.debug('any_running: %s', any_running)
             self.set_rows_selected(not any_running)
 
     def has_files(self):
@@ -158,6 +162,7 @@ class VideoConvertorGUI(object):
         selection = self.files_treeview.get_selection()
         selection.set_mode(gtk.SELECTION_MULTIPLE)
 
+        self.logger.debug('count_selected_rows: %s', selection.count_selected_rows())
         if selection.count_selected_rows() == 0:
             return None
 
@@ -175,20 +180,20 @@ class VideoConvertorGUI(object):
         self.remove_subtitles_button.set_sensitive(file_in_queue)
 
     @defer.inlineCallbacks
-    def set_conversion_running(self, conversion_running):
-        self.conversion_running = conversion_running
+    def set_conversion_running(self, set_running):
+        self.conversion_running = set_running
 
-        if conversion_running:
+        if set_running:
             yield self.spinner.start()
         else:
             yield self.spinner.stop()
 
-        image = (self.stop_image if conversion_running else self.play_image)
+        image = (self.stop_image if set_running else self.play_image)
         self.start_stop_button.set_image(image)
-        text = ('Zastavit' if conversion_running else 'Spustit')
+        text = ('Zastavit' if set_running else 'Spustit')
         self.start_stop_button.set_label(text)
-        self.start_stop_button.set_sensitive(conversion_running)
-        self.pause_button.set_sensitive(conversion_running)
+        self.start_stop_button.set_sensitive(set_running)
+        self.pause_button.set_sensitive(set_running)
 
     def on_remove_file_button_clicked(self, widget, *data):
         tree_iters = self.get_selected_rows_iters()
@@ -211,6 +216,17 @@ class VideoConvertorGUI(object):
             yield defer.succeed(self.cancel_conversion())
 
     @defer.inlineCallbacks
+    def on_pause_button_clicked(self, widget, *data):
+        assert self.conversion_running
+
+        if not self.conversion_paused:
+            self.logger.debug('Pausing conversion')
+            yield self.set_conversion_paused(True)
+        else:
+            self.logger.debug('Resuming conversion')
+            yield self.set_conversion_paused(False)
+
+    @defer.inlineCallbacks
     def start_conversion(self):
         try:
             yield self.set_conversion_running(True)
@@ -219,6 +235,37 @@ class VideoConvertorGUI(object):
 
         finally:
             yield self.set_conversion_running(False)
+
+    def cancel_conversion(self):
+        self.remove_all_tasks()
+
+        while True:
+            try:
+                process = self.processes.pop()
+                self.logger.debug('Terminating: %s', process)
+                process.terminate()
+            except KeyError:
+                break
+
+    @defer.inlineCallbacks
+    def set_conversion_paused(self, set_paused):
+        self.conversion_paused = set_paused
+
+        if set_paused:
+            yield self.spinner.stop()
+        else:
+            yield self.spinner.start()
+
+        for process in self.processes:
+            if set_paused:
+                process.pause()
+            else:
+                process.resume()
+
+    @defer.inlineCallbacks
+    def resume_conversion(self):
+        yield self.spinner.start()
+        self.conversion_paused = False
 
     def schedule_tasks(self):
         if self.any_task_exists():
@@ -239,17 +286,6 @@ class VideoConvertorGUI(object):
 
             dl = defer.DeferredList(defers)
             return dl
-
-    def cancel_conversion(self):
-        self.remove_all_tasks()
-
-        while True:
-            try:
-                process = self.processes.pop()
-                self.logger.debug('Terminating: %s', process)
-                process.terminate()
-            except KeyError:
-                break
 
     def start_process(self):
         if self.any_task_exists():

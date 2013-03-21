@@ -11,6 +11,16 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-go-down</property>
   </object>
+  <object class="GtkImage" id="pause_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-pause</property>
+  </object>
+  <object class="GtkImage" id="play_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-play</property>
+  </object>
   <object class="GtkImage" id="remove_image">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -361,16 +371,6 @@
         </child>
       </object>
     </child>
-  </object>
-  <object class="GtkImage" id="pause_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-pause</property>
-  </object>
-  <object class="GtkImage" id="play_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-play</property>
   </object>
   <object class="GtkImage" id="stop_image">
     <property name="visible">True</property>
