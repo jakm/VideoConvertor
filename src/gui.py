@@ -143,16 +143,12 @@ class VideoConvertorGUI(object):
             self.files_treeview.set_sensitive(False)
 
     def on_files_treeview_cursor_changed(self, widget, *data):
-        self.logger.debug('Cursor changed')
         tree_iters = self.get_selected_rows_iters()
-        self.logger.debug('current cursor: %s', self.files_treeview.get_cursor())
-        self.logger.debug('tree_iters: %s', tree_iters)
         if tree_iters is None:
             self.set_rows_selected(False)
         else:
             any_running = any([self._get_value(tree_iter, 'running')
                                for tree_iter in tree_iters])
-            self.logger.debug('any_running: %s', any_running)
             self.set_rows_selected(not any_running)
 
     def has_files(self):
@@ -162,7 +158,7 @@ class VideoConvertorGUI(object):
         selection = self.files_treeview.get_selection()
         selection.set_mode(gtk.SELECTION_MULTIPLE)
 
-        self.logger.debug('count_selected_rows: %s', selection.count_selected_rows())
+        # FIXME: vraci >0, i kdyz aktualne odznacim radek
         if selection.count_selected_rows() == 0:
             return None
 
