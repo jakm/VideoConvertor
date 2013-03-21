@@ -11,16 +11,6 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-go-down</property>
   </object>
-  <object class="GtkImage" id="pause_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-pause</property>
-  </object>
-  <object class="GtkImage" id="play_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="stock">gtk-media-play</property>
-  </object>
   <object class="GtkImage" id="remove_image">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -51,6 +41,7 @@
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
                     <property name="model">tasks_liststore</property>
+                    <signal name="cursor-changed" handler="on_files_treeview_cursor_changed" swapped="no"/>
                     <child internal-child="selection">
                       <object class="GtkTreeSelection" id="treeview-selection1"/>
                     </child>
@@ -189,6 +180,7 @@
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="image">remove_image</property>
+                    <signal name="clicked" handler="on_remove_file_button_clicked" swapped="no"/>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -369,6 +361,16 @@
         </child>
       </object>
     </child>
+  </object>
+  <object class="GtkImage" id="pause_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-pause</property>
+  </object>
+  <object class="GtkImage" id="play_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-play</property>
   </object>
   <object class="GtkImage" id="stop_image">
     <property name="visible">True</property>

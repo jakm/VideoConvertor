@@ -52,6 +52,8 @@ class VideoConvertorGUI(object):
         signals = {'on_add_file_button_clicked': self.on_add_file_button_clicked,
                    'on_files_liststore_row_inserted': self.on_files_liststore_row_inserted,
                    'on_files_liststore_row_deleted': self.on_files_liststore_row_deleted,
+                   'on_files_treeview_cursor_changed': self.on_files_treeview_cursor_changed,
+                   'on_remove_file_button_clicked': self.on_remove_file_button_clicked,
                    'on_start_stop_button_clicked': self.on_start_stop_button_clicked}
         builder.connect_signals(signals)
 
@@ -130,18 +132,42 @@ class VideoConvertorGUI(object):
         return pixbuf
 
     def on_files_liststore_row_inserted(self, widget, *data):
-        if self.have_file_names():
-            self.set_file_in_queue(True)
+        if self.has_files():
+            self.files_treeview.set_sensitive(True)
 
     def on_files_liststore_row_deleted(self, widget, *data):
-        if not self.have_file_names():
-            self.set_file_in_queue(False)
+        self.set_rows_selected(False)
+        if not self.has_files():
+            self.files_treeview.set_sensitive(False)
 
-    def have_file_names(self):
+    def on_files_treeview_cursor_changed(self, widget, *data):
+        self.logger.debug('Cursor changed')
+        tree_iters = self.get_selected_rows_iters()
+        if tree_iters is None:
+            self.set_rows_selected(False)
+        else:
+            any_running = any([self._get_value(tree_iter, 'running')
+                               for tree_iter in tree_iters])
+
+            self.set_rows_selected(not any_running)
+
+    def has_files(self):
         return (self.tasks_liststore.get_iter_first() is not None)
 
-    def set_file_in_queue(self, file_in_queue):
-        self.files_treeview.set_sensitive(file_in_queue)
+    def get_selected_rows_iters(self):
+        selection = self.files_treeview.get_selection()
+        selection.set_mode(gtk.SELECTION_MULTIPLE)
+
+        if selection.count_selected_rows() == 0:
+            return None
+
+        tree_model, tree_paths = selection.get_selected_rows()
+
+        tree_iters = [tree_model.get_iter(tree_path) for tree_path in tree_paths]
+
+        return tree_iters
+
+    def set_rows_selected(self, file_in_queue):
         self.remove_file_button.set_sensitive(file_in_queue)
         self.up_button.set_sensitive(file_in_queue)
         self.down_button.set_sensitive(file_in_queue)
@@ -163,6 +189,13 @@ class VideoConvertorGUI(object):
         self.start_stop_button.set_label(text)
         self.start_stop_button.set_sensitive(conversion_running)
         self.pause_button.set_sensitive(conversion_running)
+
+    def on_remove_file_button_clicked(self, widget, *data):
+        tree_iters = self.get_selected_rows_iters()
+        for tree_iter in tree_iters:
+            self.logger.debug('Removing file: %s',
+                              self._get_value(tree_iter, 'file_path'))
+            self.tasks_liststore.remove(tree_iter)
 
     @defer.inlineCallbacks
     def on_start_stop_button_clicked(self, widget, *data):
