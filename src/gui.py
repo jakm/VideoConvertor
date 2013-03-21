@@ -142,8 +142,9 @@ class VideoConvertorGUI(object):
         if not self.has_files():
             self.files_treeview.set_sensitive(False)
 
+    @defer.inlineCallbacks
     def on_files_treeview_cursor_changed(self, widget, *data):
-        tree_iters = self.get_selected_rows_iters()
+        tree_iters = yield self.get_selected_rows_iters()
         if tree_iters is None:
             self.set_rows_selected(False)
         else:
@@ -154,19 +155,24 @@ class VideoConvertorGUI(object):
     def has_files(self):
         return (self.tasks_liststore.get_iter_first() is not None)
 
+    @defer.inlineCallbacks
     def get_selected_rows_iters(self):
+        # HACK: becouse we are in single thread, we need some delay before
+        # checking actual selection
+        from twisted.internet import task
+        yield task.deferLater(reactor, 0, lambda: None)
+
         selection = self.files_treeview.get_selection()
         selection.set_mode(gtk.SELECTION_MULTIPLE)
 
-        # FIXME: vraci >0, i kdyz aktualne odznacim radek
         if selection.count_selected_rows() == 0:
-            return None
+            defer.returnValue(None)
 
         tree_model, tree_paths = selection.get_selected_rows()
 
         tree_iters = [tree_model.get_iter(tree_path) for tree_path in tree_paths]
 
-        return tree_iters
+        defer.returnValue(tree_iters)
 
     def set_rows_selected(self, file_in_queue):
         self.remove_file_button.set_sensitive(file_in_queue)
@@ -191,8 +197,9 @@ class VideoConvertorGUI(object):
         self.start_stop_button.set_sensitive(set_running)
         self.pause_button.set_sensitive(set_running)
 
+    @defer.inlineCallbacks
     def on_remove_file_button_clicked(self, widget, *data):
-        tree_iters = self.get_selected_rows_iters()
+        tree_iters = yield self.get_selected_rows_iters()
         for tree_iter in tree_iters:
             self.logger.debug('Removing file: %s',
                               self._get_value(tree_iter, 'file_path'))
