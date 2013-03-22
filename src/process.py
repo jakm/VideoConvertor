@@ -8,14 +8,15 @@ import tempfile
 from twisted.internet import defer, error, reactor
 
 from config import Configuration
-from utils import WatchingProcessProtocol
+from utils import WatchingProcessProtocol, async_function
 
 
 class ConversionProcess():
-    def __init__(self, input_file, sub_file, output_file):
+    def __init__(self, input_file, sub_file, output_file, log_stdout=False):
         self.input_file = input_file
         self.sub_file = sub_file
         self.output_file = output_file
+        self.log_stdout = log_stdout
 
         self.config = Configuration()
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -33,6 +34,7 @@ class ConversionProcess():
         self.pid = None
         self.returncode = None
         self.stderr = None
+        self.stdout = None
 
     def run(self):
         assert not self.started
@@ -130,6 +132,7 @@ class ConversionProcess():
         self.stdout_log = tempfile.TemporaryFile()
         return self.stdout_log.fileno()
 
+    @defer.inlineCallbacks
     def process_exited(self, failure):
         self.finished = True
 
@@ -147,13 +150,21 @@ class ConversionProcess():
                 else:
                     raise ValueError('Unknown exit status')
 
-            self.stderr_log.seek(0)
-            buff = self.stderr_log.read()
-            encoding = locale.getpreferredencoding()
-            self.stderr = buff.decode(encoding)
+            self.stderr = yield self.read_from_temp_file(self.stderr_log)
+
+            if self.log_stdout:
+                self.stdout = yield self.read_from_temp_file(self.stdout_log)
         finally:
             self.stdout_log.close()
             self.stderr_log.close()
+
+    @async_function
+    def read_from_temp_file(self, temp_file):
+        temp_file.seek(0)
+        buff = temp_file.read()
+        encoding = locale.getpreferredencoding()
+        data = buff.decode(encoding)
+        return data
 
     def _get_psutil_process(self):
         # psutil provides cross-platform process stop & cont orders

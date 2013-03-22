@@ -1,6 +1,8 @@
 # -*- coding: utf8 -*-
 
-from twisted.internet import protocol
+import functools
+
+from twisted.internet import protocol, threads
 
 
 def singleton(cls):
@@ -29,6 +31,17 @@ def setup_logging():
 
     #logging.basicConfig(level=logging.INFO, file='convertor.log')
     logging.basicConfig(level=logging.DEBUG)
+
+
+def async_function(fnc):
+    """
+    Dekorator. Dekorovana funkce bude spustena v samostatnem vlakne a vracet
+    bude t.i.d.Deferred.
+    """
+    @functools.wraps(fnc)
+    def wrapper(*args, **kwargs):
+        return threads.deferToThread(fnc, *args, **kwargs)
+    return wrapper
 
 
 class WatchingProcessProtocol(protocol.ProcessProtocol):

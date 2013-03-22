@@ -8,13 +8,17 @@ from twisted.internet import gtk2reactor
 gtk2reactor.install()
 
 import logging
+import locale
+import os
 import os.path
+from datetime import datetime
+from decimal import Decimal
 
 from twisted.internet import defer, reactor
 from twisted.python import failure
 
 from config import Configuration
-from utils import get_install_dir, setup_logging
+from utils import get_install_dir, setup_logging, async_function
 from process import ConversionProcess
 
 
@@ -39,6 +43,7 @@ class VideoConvertorGUI(object):
         self.conversion_running = False
         self.conversion_paused = False
         self.tasks_done = []
+        self.tasks_incomplete = []
         self.tasks_failed = []
 
         self.config = Configuration()
@@ -236,6 +241,8 @@ class VideoConvertorGUI(object):
 
             yield self.schedule_tasks()
 
+            yield self.show_report_and_log_errors()
+
         finally:
             yield self.set_conversion_running(False)
 
@@ -355,27 +362,45 @@ class VideoConvertorGUI(object):
     def set_task_started(self, task):
         self._set_value(task.tree_iter, 'running', True)
 
+    @defer.inlineCallbacks
     def task_finished(self, result, task):
 
         cancelled = (isinstance(result, failure.Failure)
                      and isinstance(result.value, defer.CancelledError))
         if cancelled:
             self.logger.debug('Task cancelled: %s', task)
-            return None
+            defer.returnValue(None)
 
         returncode = task.process.returncode
         self.logger.info('Task %s finished with return code: %s', task,
                          returncode)
 
         if returncode == 0:
-            self.tasks_done.append(task)
+            is_complete = yield self.is_task_complete(task)
+            if is_complete:
+                self.tasks_done.append(task)
+            else:
+                self.logger.warning('Task %s seems be incomplete', task)
+                self.tasks_incomplete.append(task)
         else:
             # TODO: pro stderr samostatny log soubor
             self.tasks_failed.append(task)
 
         self.tasks_liststore.remove(task.tree_iter)
 
-        return result
+        defer.returnValue(result)
+
+    @async_function
+    def is_task_complete(self, task):
+        input_file_stat = os.stat(task.input_file)
+        output_file_stat = os.stat(task.output_file)
+
+        input_file_size = input_file_stat.st_size
+        output_file_size = output_file_stat.st_size
+
+        size_ratio = Decimal(output_file_size) / Decimal(input_file_size)
+
+        return (size_ratio > Decimal('0.5'))
 
     def remove_all_tasks(self):
         # while self.any_task_exists():
@@ -401,15 +426,47 @@ class VideoConvertorGUI(object):
 
         return new_file_name
 
+    @defer.inlineCallbacks
     def show_report_and_log_errors(self):
-        if self.tasks_failed:
-            msg = ('Úspěšně dokončeno %d úloh, %d selhalo:\n'
-                   % (len(self.tasks_done), len(self.tasks_failed)))
-            msg += '\n'.join([task.input_file for task in self.tasks_failed])
-            self.show_error_dialog(msg)
-        else:
+        if not self.tasks_failed and not self.tasks_incomplete:
             msg = 'Úspěšně dokončeno %d úloh.' % len(self.tasks_done)
             self.show_info_dialog(msg)
+        else:
+            error_log_name = 'MencoderErrors_%s.log' % datetime.now()
+
+            yield self.write_error_log(error_log_name)
+
+            message_template = '''
+Úspěšně dokončeno %d úloh, selhalo %d úloh a %d úloh je nekompletních.
+
+Nekompletně dokončené úlohy mohou mít poškozený vstupní soubor!
+
+Chybové výstupy byly uloženy do logu %s.
+
+======================================================================
+
+Neúspěšné úlohy:
+
+%s
+
+Nekompletní úlohy:
+
+%s
+'''
+
+            tasks_failed = '\n'.join([task.input_file
+                                      for task in self.tasks_failed])
+            tasks_incomplete = '\n'.join([task.input_file
+                                          for task in self.tasks_incomplete])
+
+            message = message_template % (len(self.tasks_done),
+                                          len(self.tasks_failed),
+                                          len(self.tasks_incomplete),
+                                          error_log_name,
+                                          tasks_failed,
+                                          tasks_incomplete)
+
+            self.show_error_dialog(message)
 
     def show_info_dialog(self, message):
         dialog = gtk.MessageDialog(self.main_window,
@@ -422,6 +479,42 @@ class VideoConvertorGUI(object):
     def show_error_dialog(self, message):
         dialog = ErrorDialog(message)
         dialog.run()
+
+    @async_function
+    def write_error_log(self, log_name):
+        encoding = locale.getpreferredencoding()
+
+        def format_task(task):
+            return ('Task: input_file="%s", sub_file="%s", output_file="%s"'
+                    % (task.input_file, task.sub_file, task.output_file))
+
+        def write_section(f, section_title, tasks):
+            record_template = '{0}\nreturncode:{1}\n\n\n{2}'
+            data = (record_template.format(format_task(task),
+                                           task.process.returncode,
+                                           task.process.stderr)
+                    for task in tasks)
+
+            msg = '>>>>>> {0}\n\n\n'.format(section_title)
+
+            separator = '\n\n\n------------------------------------------\n\n\n'
+            msg += separator.join(data)
+
+            f.write(msg.encode(encoding))
+
+        try:
+            log_dir_path = os.path.join(get_install_dir(), 'log')
+            log_file_path = os.path.join(log_dir_path, log_name)
+
+            if not os.path.exists(log_dir_path):
+                os.mkdir(log_dir_path)
+
+            with file(log_file_path, 'a') as f:
+                write_section(f, 'FAILED TASKS', self.tasks_failed)
+                write_section(f, 'INCOMPLETE TASKS', self.tasks_incomplete)
+        except:
+            import traceback
+            self.logger.critical(traceback.format_exc())
 
     def _get_value(self, tree_iter, column):
         column_no = {'file_path': 0, 'sub_path': 1, 'has_sub': 2, 'subpix': 3,
