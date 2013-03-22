@@ -298,10 +298,10 @@ class VideoConvertorGUI(object):
             path = model.get_path(tree_iter)
             row = path[0]
             if row > 0:
-                this = model[row][0]
-                prev = model[row-1][0]
-                model[row-1][0] = this
-                model[row][0] = prev
+                this = tuple(model[row])
+                prev = tuple(model[row-1])
+                model[row-1] = this
+                model[row] = prev
 
                 selection.unselect_path(row)
                 selection.select_path(row-1)
@@ -322,10 +322,10 @@ class VideoConvertorGUI(object):
             path = model.get_path(tree_iter)
             row = path[0]
             if row < row_count - 1:
-                this = model[row][0]
-                next = model[row+1][0]
-                model[row+1][0] = this
-                model[row][0] = next
+                this = tuple(model[row])
+                next = tuple(model[row+1])
+                model[row+1] = this
+                model[row] = next
 
                 selection.unselect_path(row)
                 selection.select_path(row+1)
