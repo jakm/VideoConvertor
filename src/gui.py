@@ -26,7 +26,7 @@ class Task(object):
     input_file = None
     sub_file = None
     output_file = None
-    tree_iter = None
+    row_id = None
     process = None
 
     def __str__(self):
@@ -34,6 +34,8 @@ class Task(object):
 
 
 class VideoConvertorGUI(object):
+    last_row_id = 0
+
     def __init__(self):
         setup_logging()
 
@@ -134,7 +136,10 @@ class VideoConvertorGUI(object):
 
         pixbuf = self.get_image_pixbuf('gtk-select-font')
 
-        datarow = (file_name, '', False, pixbuf, False)
+        row_id = self.last_row_id
+        self.last_row_id += 1
+
+        datarow = (row_id, file_name, None, False, pixbuf, False)
         self.tasks_liststore.append(datarow)
 
     def get_image_pixbuf(self, stock_id):
@@ -154,19 +159,19 @@ class VideoConvertorGUI(object):
 
     @defer.inlineCallbacks
     def on_files_treeview_cursor_changed(self, widget, *data):
-        tree_iters = yield self.get_selected_rows_iters()
-        if tree_iters is None:
+        rows = yield self.get_selected_rows()
+        if len(rows) == 0:
             yield self.set_rows_selected(False)
         else:
-            any_running = any([self._get_value(tree_iter, 'running')
-                               for tree_iter in tree_iters])
+            column = self._get_column_no('running')
+            any_running = any([row[column] for row in rows])
             yield self.set_rows_selected(not any_running)
 
     def has_files(self):
-        return (self.tasks_liststore.get_iter_first() is not None)
+        return (len(self.tasks_liststore) > 0)
 
     @defer.inlineCallbacks
-    def get_selected_rows_iters(self):
+    def get_selected_paths(self):
         # HACK: becouse we are in single thread, we need some delay before
         # checking actual selection
         from twisted.internet import task
@@ -180,9 +185,18 @@ class VideoConvertorGUI(object):
 
         tree_model, tree_paths = selection.get_selected_rows()
 
-        tree_iters = [tree_model.get_iter(tree_path) for tree_path in tree_paths]
+        defer.returnValue(tree_paths)
 
-        defer.returnValue(tree_iters)
+    @defer.inlineCallbacks
+    def get_selected_rows(self):
+        tree_paths = yield self.get_selected_paths()
+
+        if tree_paths is None:
+            defer.returnValue([])
+
+        rows = [self.tasks_liststore[path] for path in tree_paths]
+
+        defer.returnValue(rows)
 
     @defer.inlineCallbacks
     def set_rows_selected(self, selected):
@@ -211,17 +225,34 @@ class VideoConvertorGUI(object):
 
     @defer.inlineCallbacks
     def on_remove_file_button_clicked(self, widget, *data):
-        tree_iters = yield self.get_selected_rows_iters()
-        for tree_iter in tree_iters:
-            self.logger.debug('Removing file: %s',
-                              self._get_value(tree_iter, 'file_path'))
-            self.tasks_liststore.remove(tree_iter)
+        rows = yield self.get_selected_rows()
+        column = self._get_column_no('file_path')
+        for row in rows:
+            self.logger.debug('Removing file: %s', row[column])
+
+            self.remove_row(row)
+
+    def remove_row(self, row_to_remove):
+        column = self._get_column_no('id')
+
+        id_to_remove = row_to_remove[column]
+
+        for i in range(len(self.tasks_liststore)):
+            path = (i,)
+
+            row = self.tasks_liststore[path]
+            row_id = row[column]
+
+            if row_id == id_to_remove:
+                iter_ = self.tasks_liststore.get_iter(path)
+                self.tasks_liststore.remove(iter_)
+                break
 
     @defer.inlineCallbacks
     def on_add_subtitles_button_clicked(self, widget, *data):
-        tree_iters = yield self.get_selected_rows_iters()
+        rows = yield self.get_selected_rows()
 
-        if tree_iters is None:
+        if len(rows) == 0:
             return
 
         filter_ = gtk.FileFilter()
@@ -238,32 +269,33 @@ class VideoConvertorGUI(object):
 
         file_name = file_names[0]
 
-        for tree_iter in tree_iters:
-            input_file = self._get_value(tree_iter, 'file_path')
+        for row in rows:
+            input_file = row[self._get_column_no('file_path')]
             self.logger.debug('Adding subtitles to entry %s: %s',
                               input_file, file_name)
 
-            self._set_value(tree_iter, 'sub_path', file_name)
+            row[self._get_column_no('sub_path')] = file_name
 
         yield self.set_subtitles_entry()
 
     @defer.inlineCallbacks
     def set_subtitles_entry(self):
-        tree_iters = yield self.get_selected_rows_iters()
+        rows = yield self.get_selected_rows()
 
-        if tree_iters is None:
+        column = self._get_column_no('sub_path')
+
+        if len(rows) == 0:
             self.subtitles_entry.set_text('')
 
-        elif len(tree_iters) == 1:
-            file_name = self._get_value(tree_iters[0], 'sub_path')
+        elif len(rows) == 1:
+            file_name = rows[0][column]
 
             if file_name is None:
                 file_name = ''
 
             self.subtitles_entry.set_text(file_name)
         else:
-            any_has_subtitles = any([self._get_value(tree_iter, 'sub_path')
-                                     for tree_iter in tree_iters])
+            any_has_subtitles = any([row[column] for row in rows])
 
             if any_has_subtitles:
                 self.subtitles_entry.set_text('~~~~~~')
@@ -272,30 +304,29 @@ class VideoConvertorGUI(object):
 
     @defer.inlineCallbacks
     def on_remove_subtitles_button_clicked(self, widget, *data):
-        tree_iters = yield self.get_selected_rows_iters()
+        rows = yield self.get_selected_rows()
 
-        for tree_iter in tree_iters:
-            input_file = self._get_value(tree_iter, 'file_path')
+        for row in rows:
+            input_file = row[self._get_column_no('file_path')]
             self.logger.debug('Removing subtitles to entry %s',
                               input_file)
 
-            self._set_value(tree_iter, 'sub_path', None)
+            row[self._get_column_no('sub_path')] = None
 
         yield self.set_subtitles_entry()
 
     @defer.inlineCallbacks
     def on_up_button_clicked(self, widget, *data):
-        tree_iters = yield self.get_selected_rows_iters()
+        paths = yield self.get_selected_paths()
 
-        if not tree_iters:
+        if len(paths) == 0:
             return
 
         model = self.tasks_liststore
 
         selection = self.files_treeview.get_selection()
 
-        for tree_iter in tree_iters:
-            path = model.get_path(tree_iter)
+        for path in paths:
             row = path[0]
             if row > 0:
                 this = tuple(model[row])
@@ -308,9 +339,9 @@ class VideoConvertorGUI(object):
 
     @defer.inlineCallbacks
     def on_down_button_clicked(self, widget, *data):
-        tree_iters = yield self.get_selected_rows_iters()
+        paths = yield self.get_selected_paths()
 
-        if not tree_iters:
+        if len(paths) == 0:
             return
 
         model = self.tasks_liststore
@@ -318,8 +349,10 @@ class VideoConvertorGUI(object):
 
         selection = self.files_treeview.get_selection()
 
-        for tree_iter in tree_iters:
-            path = model.get_path(tree_iter)
+        # we have to move bottom row first
+        paths = reversed(sorted(paths))
+
+        for path in paths:
             row = path[0]
             if row < row_count - 1:
                 this = tuple(model[row])
@@ -382,12 +415,10 @@ class VideoConvertorGUI(object):
                 break
 
     def reset_tasks_queue(self):
-        is_running = lambda it: (self._get_value(it, 'running') is True)
+        column = self._get_column_no('running')
 
-        tree_iter = self.tasks_liststore.get_iter_first()
-        while tree_iter is not None and is_running(tree_iter):
-            self._set_value(tree_iter, 'running', False)
-            tree_iter = self.tasks_liststore.iter_next(tree_iter)
+        for row in iter(self.tasks_liststore):
+            row[column] = False
 
     def reset_finished_tasks(self):
         del self.tasks_done[:]
@@ -462,15 +493,17 @@ class VideoConvertorGUI(object):
             return process.deferred
 
     def any_task_exists(self):
-        return (self.get_iter_not_running() is not None)
+        return (len(self.get_rows_not_running()) > 0)
 
     def get_top_task(self):
-        tree_iter = self.get_iter_not_running()
+        rows = self.get_rows_not_running()
 
-        if tree_iter is None:
+        if len(rows) == 0:
             return None
 
-        input_file_name = self._get_value(tree_iter, 'file_path')
+        row = rows[0]
+
+        input_file_name = row[self._get_column_no('file_path')]
         output_file_name = self.extend_file_name(input_file_name)
 
         self.logger.debug('Input file: %s, output file: %s', input_file_name,
@@ -478,26 +511,34 @@ class VideoConvertorGUI(object):
 
         task = Task()
         task.input_file = input_file_name
-        task.sub_file = self._get_value(tree_iter, 'sub_path')
+        task.sub_file = row[self._get_column_no('sub_path')]
         task.output_file = output_file_name
-        task.tree_iter = tree_iter
+        task.row_id = row[self._get_column_no('id')]
 
         return task
 
-    def get_iter_not_running(self):
-        is_running = lambda it: (self._get_value(it, 'running') is True)
+    def get_rows_not_running(self):
+        rows_not_running = []
 
-        tree_iter = self.tasks_liststore.get_iter_first()
-        while tree_iter is not None and is_running(tree_iter):
-            tree_iter = self.tasks_liststore.iter_next(tree_iter)
+        column = self._get_column_no('running')
+        for row in iter(self.tasks_liststore):
+            if row[column] is not True:
+                rows_not_running.append(row)
 
-        if tree_iter is None:
-            return None
-
-        return tree_iter
+        return rows_not_running
 
     def set_task_started(self, task):
-        self._set_value(task.tree_iter, 'running', True)
+        column_running = self._get_column_no('running')
+        row = self.get_row_by_id(task.row_id)
+        row[column_running] = True
+
+    def get_row_by_id(self, row_id):
+        column_id = self._get_column_no('id')
+        for row in iter(self.tasks_liststore):
+            if row[column_id] == row_id:
+                return row
+
+        return None
 
     @defer.inlineCallbacks
     def task_finished(self, result, task):
@@ -523,7 +564,8 @@ class VideoConvertorGUI(object):
             # TODO: pro stderr samostatny log soubor
             self.tasks_failed.append(task)
 
-        self.tasks_liststore.remove(task.tree_iter)
+        row = self.get_row_by_id(task.row_id)
+        self.remove_row(row)
 
         defer.returnValue(result)
 
@@ -640,15 +682,10 @@ Nekompletní úlohy:
             import traceback
             self.logger.critical(traceback.format_exc())
 
-    def _get_value(self, tree_iter, column):
-        column_no = {'file_path': 0, 'sub_path': 1, 'has_sub': 2, 'subpix': 3,
-                     'running': 4}[column]
-        return self.tasks_liststore.get_value(tree_iter, column_no)
-
-    def _set_value(self, tree_iter, column, value):
-        column_no = {'file_path': 0, 'sub_path': 1, 'has_sub': 2, 'subpix': 3,
-                     'running': 4}[column]
-        return self.tasks_liststore.set_value(tree_iter, column_no, value)
+    def _get_column_no(self, column):
+        column_no = {'id': 0,  'file_path': 1, 'sub_path': 2, 'has_sub': 3,
+                     'subpix': 4, 'running': 5}[column]
+        return column_no
 
 
 class ErrorDialog(object):
