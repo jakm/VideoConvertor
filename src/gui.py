@@ -393,9 +393,13 @@ class VideoConvertorGUI(object):
     def extend_file_name(self, file_name):
         elements = file_name.split('.')
         if len(elements) > 1:
-            return '.'.join(elements[0:-1] + ['NEW'] + elements[-1:])
+            new_file_name = '.'.join(elements[0:-1] + ['NEW'])
         else:
-            return '.'.join(elements + ['NEW'])
+            new_file_name = '.'.join(elements + ['NEW'])
+
+        new_file_name += '.avi'
+
+        return new_file_name
 
     def show_report_and_log_errors(self):
         if self.tasks_failed:
