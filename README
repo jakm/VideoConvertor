@@ -5,5 +5,7 @@ Dependencies:
 	Python 2.7
 	GTK+ 2.24
 	PyGTK 2.24
-	psutil 0.6.1
+	psutil >=0.4.1
+    Twisted >=11.1.0
+    zope.interface >=4.0.4
 	mencoder
