@@ -199,7 +199,6 @@ class VideoConvertorGUI(object):
         self.start_stop_button.set_image(image)
         text = ('Zastavit' if set_running else 'Spustit')
         self.start_stop_button.set_label(text)
-        self.start_stop_button.set_sensitive(set_running)
         self.pause_button.set_sensitive(set_running)
 
     @defer.inlineCallbacks
@@ -239,6 +238,8 @@ class VideoConvertorGUI(object):
         try:
             yield self.set_conversion_running(True)
 
+            self.reset_finished_tasks()
+
             yield self.schedule_tasks()
 
             yield self.show_report_and_log_errors()
@@ -247,8 +248,10 @@ class VideoConvertorGUI(object):
             yield self.set_conversion_running(False)
 
     def cancel_conversion(self):
-        self.remove_all_tasks()
+        self.stop_running_processes()
+        self.reset_tasks_queue()
 
+    def stop_running_processes(self):
         while True:
             try:
                 process = self.processes.pop()
@@ -256,6 +259,19 @@ class VideoConvertorGUI(object):
                 process.terminate()
             except KeyError:
                 break
+
+    def reset_tasks_queue(self):
+        is_running = lambda it: (self._get_value(it, 'running') is True)
+
+        tree_iter = self.tasks_liststore.get_iter_first()
+        while tree_iter is not None and is_running(tree_iter):
+            self._set_value(tree_iter, 'running', False)
+            tree_iter = self.tasks_liststore.iter_next(tree_iter)
+
+    def reset_finished_tasks(self):
+        del self.tasks_done[:]
+        del self.tasks_failed[:]
+        del self.tasks_incomplete[:]
 
     @defer.inlineCallbacks
     def set_conversion_paused(self, set_paused):
@@ -402,19 +418,6 @@ class VideoConvertorGUI(object):
 
         return (size_ratio > Decimal('0.5'))
 
-    def remove_all_tasks(self):
-        # while self.any_task_exists():
-        #     tree_iter = self.tasks_liststore.get_iter_first()
-        #     self.tasks_liststore.remove(tree_iter)
-
-        self.logger.debug('Removing all tasks from queue')
-
-        tree_iter = self.tasks_liststore.get_iter_first()
-        while tree_iter is not None:
-            previous = tree_iter
-            tree_iter = self.tasks_liststore.get_iter_first()
-            self.tasks_liststore.remove(previous)
-
     def extend_file_name(self, file_name):
         elements = file_name.split('.')
         if len(elements) > 1:
@@ -443,7 +446,7 @@ Nekompletně dokončené úlohy mohou mít poškozený vstupní soubor!
 
 Chybové výstupy byly uloženy do logu %s.
 
-======================================================================
+===================================================
 
 Neúspěšné úlohy:
 
