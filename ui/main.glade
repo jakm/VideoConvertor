@@ -113,6 +113,7 @@
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <signal name="clicked" handler="on_add_subtitles_button_clicked" swapped="no"/>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -128,6 +129,7 @@
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <signal name="clicked" handler="on_remove_subtitles_button_clicked" swapped="no"/>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -210,6 +212,7 @@
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">up_image</property>
+                        <signal name="clicked" handler="on_up_button_clicked" swapped="no"/>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -224,6 +227,7 @@
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="image">down_image</property>
+                        <signal name="clicked" handler="on_down_button_clicked" swapped="no"/>
                       </object>
                       <packing>
                         <property name="expand">False</property>

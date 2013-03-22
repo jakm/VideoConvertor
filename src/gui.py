@@ -55,11 +55,15 @@ class VideoConvertorGUI(object):
         ui_file = os.path.join(get_install_dir(), 'ui', 'main.glade')
         builder.add_from_file(ui_file)
 
-        signals = {'on_add_file_button_clicked': self.on_add_file_button_clicked,
-                   'on_files_liststore_row_inserted': self.on_files_liststore_row_inserted,
+        signals = {'on_files_liststore_row_inserted': self.on_files_liststore_row_inserted,
                    'on_files_liststore_row_deleted': self.on_files_liststore_row_deleted,
                    'on_files_treeview_cursor_changed': self.on_files_treeview_cursor_changed,
+                   'on_add_file_button_clicked': self.on_add_file_button_clicked,
                    'on_remove_file_button_clicked': self.on_remove_file_button_clicked,
+                   'on_add_subtitles_button_clicked': self.on_add_subtitles_button_clicked,
+                   'on_remove_subtitles_button_clicked': self.on_remove_subtitles_button_clicked,
+                   'on_up_button_clicked': self.on_up_button_clicked,
+                   'on_down_button_clicked': self.on_down_button_clicked,
                    'on_start_stop_button_clicked': self.on_start_stop_button_clicked,
                    'on_pause_button_clicked': self.on_pause_button_clicked}
         builder.connect_signals(signals)
@@ -142,8 +146,9 @@ class VideoConvertorGUI(object):
         if self.has_files():
             self.files_treeview.set_sensitive(True)
 
+    @defer.inlineCallbacks
     def on_files_liststore_row_deleted(self, widget, *data):
-        self.set_rows_selected(False)
+        yield self.set_rows_selected(False)
         if not self.has_files():
             self.files_treeview.set_sensitive(False)
 
@@ -151,11 +156,11 @@ class VideoConvertorGUI(object):
     def on_files_treeview_cursor_changed(self, widget, *data):
         tree_iters = yield self.get_selected_rows_iters()
         if tree_iters is None:
-            self.set_rows_selected(False)
+            yield self.set_rows_selected(False)
         else:
             any_running = any([self._get_value(tree_iter, 'running')
                                for tree_iter in tree_iters])
-            self.set_rows_selected(not any_running)
+            yield self.set_rows_selected(not any_running)
 
     def has_files(self):
         return (self.tasks_liststore.get_iter_first() is not None)
@@ -179,12 +184,15 @@ class VideoConvertorGUI(object):
 
         defer.returnValue(tree_iters)
 
-    def set_rows_selected(self, file_in_queue):
-        self.remove_file_button.set_sensitive(file_in_queue)
-        self.up_button.set_sensitive(file_in_queue)
-        self.down_button.set_sensitive(file_in_queue)
-        self.add_subtitles_button.set_sensitive(file_in_queue)
-        self.remove_subtitles_button.set_sensitive(file_in_queue)
+    @defer.inlineCallbacks
+    def set_rows_selected(self, selected):
+        self.remove_file_button.set_sensitive(selected)
+        self.up_button.set_sensitive(selected)
+        self.down_button.set_sensitive(selected)
+        self.add_subtitles_button.set_sensitive(selected)
+        self.remove_subtitles_button.set_sensitive(selected)
+
+        yield self.set_subtitles_entry()
 
     @defer.inlineCallbacks
     def set_conversion_running(self, set_running):
@@ -208,6 +216,119 @@ class VideoConvertorGUI(object):
             self.logger.debug('Removing file: %s',
                               self._get_value(tree_iter, 'file_path'))
             self.tasks_liststore.remove(tree_iter)
+
+    @defer.inlineCallbacks
+    def on_add_subtitles_button_clicked(self, widget, *data):
+        tree_iters = yield self.get_selected_rows_iters()
+
+        if tree_iters is None:
+            return
+
+        filter_ = gtk.FileFilter()
+        filter_.set_name('Soubory titulků')
+        for extension in ('sub', 'srt', 'txt'):
+            filter_.add_pattern('*.' + extension)
+
+        file_names = self.open_file_chooser_dialog('Soubory titulků ...',
+                                                   filters=(filter_,),
+                                                   select_multiple=False)
+
+        if not file_names:
+            return
+
+        file_name = file_names[0]
+
+        for tree_iter in tree_iters:
+            input_file = self._get_value(tree_iter, 'file_path')
+            self.logger.debug('Adding subtitles to entry %s: %s',
+                              input_file, file_name)
+
+            self._set_value(tree_iter, 'sub_path', file_name)
+
+        yield self.set_subtitles_entry()
+
+    @defer.inlineCallbacks
+    def set_subtitles_entry(self):
+        tree_iters = yield self.get_selected_rows_iters()
+
+        if tree_iters is None:
+            self.subtitles_entry.set_text('')
+
+        elif len(tree_iters) == 1:
+            file_name = self._get_value(tree_iters[0], 'sub_path')
+
+            if file_name is None:
+                file_name = ''
+
+            self.subtitles_entry.set_text(file_name)
+        else:
+            any_has_subtitles = any([self._get_value(tree_iter, 'sub_path')
+                                     for tree_iter in tree_iters])
+
+            if any_has_subtitles:
+                self.subtitles_entry.set_text('~~~~~~')
+            else:
+                self.subtitles_entry.set_text('')
+
+    @defer.inlineCallbacks
+    def on_remove_subtitles_button_clicked(self, widget, *data):
+        tree_iters = yield self.get_selected_rows_iters()
+
+        for tree_iter in tree_iters:
+            input_file = self._get_value(tree_iter, 'file_path')
+            self.logger.debug('Removing subtitles to entry %s',
+                              input_file)
+
+            self._set_value(tree_iter, 'sub_path', None)
+
+        yield self.set_subtitles_entry()
+
+    @defer.inlineCallbacks
+    def on_up_button_clicked(self, widget, *data):
+        tree_iters = yield self.get_selected_rows_iters()
+
+        if not tree_iters:
+            return
+
+        model = self.tasks_liststore
+
+        selection = self.files_treeview.get_selection()
+
+        for tree_iter in tree_iters:
+            path = model.get_path(tree_iter)
+            row = path[0]
+            if row > 0:
+                this = model[row][0]
+                prev = model[row-1][0]
+                model[row-1][0] = this
+                model[row][0] = prev
+
+                selection.unselect_path(row)
+                selection.select_path(row-1)
+
+    @defer.inlineCallbacks
+    def on_down_button_clicked(self, widget, *data):
+        tree_iters = yield self.get_selected_rows_iters()
+
+        if not tree_iters:
+            return
+
+        model = self.tasks_liststore
+        row_count = len(model)
+
+        selection = self.files_treeview.get_selection()
+
+        for tree_iter in tree_iters:
+            path = model.get_path(tree_iter)
+            row = path[0]
+            if row < row_count - 1:
+                this = model[row][0]
+                next = model[row+1][0]
+                model[row+1][0] = this
+                model[row][0] = next
+
+                selection.unselect_path(row)
+                selection.select_path(row+1)
 
     @defer.inlineCallbacks
     def on_start_stop_button_clicked(self, widget, *data):
