@@ -42,10 +42,11 @@ class ConversionProcess():
         args = shlex.split(conversion_command)
         executable = args[0]
 
+        stdout_log_fd = self.open_stdout_log()
         stderr_log_fd = self.open_stderr_log()
 
         fds_map = {0: 0,
-                   1: 1,
+                   1: stdout_log_fd,
                    2: stderr_log_fd}
 
         self.process_protocol = proto = WatchingProcessProtocol(self.deferred)
@@ -125,6 +126,10 @@ class ConversionProcess():
         self.stderr_log = tempfile.TemporaryFile()
         return self.stderr_log.fileno()
 
+    def open_stdout_log(self):
+        self.stdout_log = tempfile.TemporaryFile()
+        return self.stdout_log.fileno()
+
     def process_exited(self, failure):
         self.finished = True
 
@@ -147,6 +152,7 @@ class ConversionProcess():
             encoding = locale.getpreferredencoding()
             self.stderr = buff.decode(encoding)
         finally:
+            self.stdout_log.close()
             self.stderr_log.close()
 
     def _get_psutil_process(self):
