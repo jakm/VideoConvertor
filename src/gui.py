@@ -275,6 +275,7 @@ class VideoConvertorGUI(object):
                               input_file, file_name)
 
             row[self._get_column_no('sub_path')] = file_name
+            row[self._get_column_no('has_sub')] = True
 
         yield self.set_subtitles_entry()
 
@@ -312,6 +313,7 @@ class VideoConvertorGUI(object):
                               input_file)
 
             row[self._get_column_no('sub_path')] = None
+            row[self._get_column_no('has_sub')] = False
 
         yield self.set_subtitles_entry()
 
