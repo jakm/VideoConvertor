@@ -18,7 +18,7 @@ from twisted.internet import defer, reactor
 from twisted.python import failure
 
 from config import Configuration
-from utils import get_install_dir, setup_logging, async_function
+from utils import get_install_dir, get_app_dir, setup_logging, async_function
 from process import ConversionProcess
 
 
@@ -671,7 +671,7 @@ Nekompletní úlohy:
             f.write(msg.encode(encoding))
 
         try:
-            log_dir_path = os.path.join(get_install_dir(), 'log')
+            log_dir_path = os.path.join(get_app_dir(), 'log')
             log_file_path = os.path.join(log_dir_path, log_name)
 
             if not os.path.exists(log_dir_path):

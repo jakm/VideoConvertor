@@ -26,10 +26,23 @@ def get_install_dir():
     return os.path.dirname(sys.argv[0])
 
 
+def get_app_dir():
+    import os
+    import os.path
+
+    user_home = os.path.expanduser('~')
+    app_dir = os.path.join(user_home, '.videoconvertor')
+
+    if not os.path.exists(app_dir):
+        os.mkdir(app_dir)
+
+    return app_dir
+
+
 def setup_logging():
     import logging
 
-    #logging.basicConfig(level=logging.INFO, file='convertor.log')
+    #logging.basicConfig(level=logging.INFO, file='videoconvertor.log')
     logging.basicConfig(level=logging.DEBUG)
 
 
