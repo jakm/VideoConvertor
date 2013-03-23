@@ -123,7 +123,7 @@ class VideoConvertorGUI(object):
 
         try:
             response = dialog.run()
-            if response == gtk.RESPONSE_CANCEL:
+            if response != gtk.RESPONSE_OK:
                 return []
 
             file_names = dialog.get_filenames()
