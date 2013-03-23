@@ -73,6 +73,7 @@ class VideoConvertorGUI(object):
         self._set_widget_objects(builder)
 
         self.main_window.connect('destroy', lambda widget, *data: self.close())
+        self.main_window.connect('delete-event', self.check_closing)
         self.main_window.show_all()
 
     def _set_widget_objects(self, builder):
@@ -92,10 +93,14 @@ class VideoConvertorGUI(object):
         reactor.run()
 
     def close(self):
-        # TODO: vypnout jen tak okno pri converzi nebude mozne, musim vymyslet,
-        # jak na to
         self.logger.info('Terminating application')
         reactor.stop()
+
+    def check_closing(self, widget, *data):
+        if self.conversion_running:
+            msg = 'Probíhá konverze! Před vypnutím aplikace ji ukončete.'
+            self.show_info_dialog(msg)
+            return True
 
     def on_add_file_button_clicked(self, widget, *data):
         filter_ = gtk.FileFilter()
@@ -565,7 +570,6 @@ class VideoConvertorGUI(object):
                 self.logger.warning('Task %s seems be incomplete', task)
                 self.tasks_incomplete.append(task)
         else:
-            # TODO: pro stderr samostatny log soubor
             self.tasks_failed.append(task)
 
         row = self.get_row_by_id(task.row_id)
@@ -651,6 +655,7 @@ Nekompletní úlohy:
     def show_error_dialog(self, message):
         dialog = ErrorDialog(message)
         dialog.run()
+        dialog.destroy()
 
     @async_function
     def write_error_log(self, log_name):
@@ -719,6 +724,9 @@ class ErrorDialog(object):
 
     def run(self):
         self.dialog.run()
+
+    def destroy(self):
+        self.dialog.destroy()
 
     def close(self):
         self.dialog.hide()
