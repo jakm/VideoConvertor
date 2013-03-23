@@ -3,6 +3,7 @@
 import locale
 import logging
 import shlex
+import sys
 import tempfile
 
 from twisted.internet import defer, error, reactor
@@ -96,17 +97,24 @@ class ConversionProcess():
             self.logger.debug('psutil process is None')
 
     def get_conversion_command(self):
+        if sys.platform in ('win32', 'cygwin'):
+            convertor_exe = self.config.get('command', 'convertor_exe_win')
+        else:
+            convertor_exe = self.config.get('command', 'convertor_exe_unix')
+
         input_file_alias = self.config.get('command', 'input_file_alias')
         output_file_alias = self.config.get('command', 'output_file_alias')
-        conversion_command = self.config.get('command', 'conversion_command')
+        convertor_args = self.config.get('command', 'convertor_args')
 
-        conversion_command = conversion_command.replace(input_file_alias,
-                                                        self.input_file)
-        conversion_command = conversion_command.replace(output_file_alias,
-                                                        self.output_file)
+        convertor_args = convertor_args.replace(input_file_alias,
+                                                self.input_file)
+        convertor_args = convertor_args.replace(output_file_alias,
+                                                self.output_file)
 
-        conversion_command = self.extend_command_by_sub(self.sub_file,
-                                                        conversion_command)
+        convertor_args = self.extend_command_by_sub(self.sub_file,
+                                                    convertor_args)
+
+        conversion_command = convertor_exe + ' ' + convertor_args
 
         self.logger.debug('Convert command: ' + conversion_command)
 
