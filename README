@@ -8,4 +8,5 @@ Dependencies:
 	psutil >=0.4.1
 	Twisted >=11.1.0
 	zope.interface >=4.0.4
+	pywin32 >= 218
 	mencoder
