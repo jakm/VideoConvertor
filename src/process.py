@@ -53,6 +53,8 @@ class ConversionProcess():
         proto.outReceived = lambda data: self.stdout_log.write(data)
         proto.errReceived = lambda data: self.stderr_log.write(data)
 
+        self.logger.info('Starting conversion process of %s', self.input_file)
+
         self.process_transport = reactor.spawnProcess(proto, executable, args)
 
         self.process_protocol = proto
@@ -64,6 +66,8 @@ class ConversionProcess():
     def terminate(self):
         if self.finished:
             return
+
+        self.logger.info('Terminating conversion process of %s', self.input_file)
 
         try:
             self.process_transport.signalProcess('TERM')
@@ -160,6 +164,9 @@ class ConversionProcess():
                     self.returncode = -1 * status.signal
                 else:
                     raise ValueError('Unknown exit status')
+
+            self.logger.info('Conversion process of %s exited with status %s',
+                             self.input_file, self.returncode)
 
             self.stderr = yield self.read_from_temp_file(self.stderr_log)
 

@@ -88,11 +88,13 @@ class VideoConvertorGUI(object):
             setattr(self, widget_name, go(widget_name))
 
     def main(self):
+        self.logger.info('Starting application')
         reactor.run()
 
     def close(self):
         # TODO: vypnout jen tak okno pri converzi nebude mozne, musim vymyslet,
         # jak na to
+        self.logger.info('Terminating application')
         reactor.stop()
 
     def on_add_file_button_clicked(self, widget, *data):
@@ -479,7 +481,7 @@ class VideoConvertorGUI(object):
                                         task.sub_file,
                                         task.output_file)
 
-            self.logger.info('Created new process object: %s', process)
+            self.logger.debug('Created new process object: %s', process)
 
             process.run()
             self.processes.add(process)
@@ -552,8 +554,8 @@ class VideoConvertorGUI(object):
             defer.returnValue(None)
 
         returncode = task.process.returncode
-        self.logger.info('Task %s finished with return code: %s', task,
-                         returncode)
+        self.logger.debug('Task %s finished with return code: %s', task,
+                          returncode)
 
         if returncode == 0:
             is_complete = yield self.is_task_complete(task)
