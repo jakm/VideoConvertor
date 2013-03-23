@@ -657,13 +657,13 @@ Nekompletní úlohy:
                     % (task.input_file, task.sub_file, task.output_file))
 
         def write_section(f, section_title, tasks):
-            record_template = '{0}\nreturncode:{1}\n\n\n{2}'
+            record_template = '{0}\n\nreturncode:{1}\n\n\n{2}'
             data = (record_template.format(format_task(task),
                                            task.process.returncode,
                                            task.process.stderr)
                     for task in tasks)
 
-            msg = '>>>>>> {0}\n\n\n'.format(section_title)
+            msg = '\n>>>>>> {0}\n\n\n'.format(section_title)
 
             separator = '\n\n\n------------------------------------------\n\n\n'
             msg += separator.join(data)
