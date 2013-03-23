@@ -601,6 +601,8 @@ class VideoConvertorGUI(object):
             self.show_info_dialog(msg)
         else:
             error_log_name = 'MencoderErrors_%s.log' % datetime.now()
+            # colon is not allowed in windows path
+            error_log_name = error_log_name.replace(':', '-')
 
             yield self.write_error_log(error_log_name)
 
