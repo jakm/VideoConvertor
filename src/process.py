@@ -103,6 +103,8 @@ class ConversionProcess():
         else:
             convertor_exe = self.config.get('command', 'convertor_exe_unix')
 
+        convertor_exe = '"' + convertor_exe + '"'  # spaces in path
+
         input_file_alias = self.config.get('command', 'input_file_alias')
         output_file_alias = self.config.get('command', 'output_file_alias')
         convertor_args = self.config.get('command', 'convertor_args')
