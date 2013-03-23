@@ -2,7 +2,7 @@
 
 import functools
 
-from twisted.internet import protocol, threads
+from twisted.internet import protocol
 
 
 def singleton(cls):
@@ -41,9 +41,38 @@ def get_app_dir():
 
 def setup_logging():
     import logging
+    import os.path
+    from config import Configuration
 
-    #logging.basicConfig(level=logging.INFO, file='videoconvertor.log')
-    logging.basicConfig(level=logging.DEBUG)
+    config = Configuration()
+
+    levels_map = {'CRITICAL': logging.CRITICAL, 'ERROR': logging.ERROR,
+                  'WARNING': logging.WARNING, 'INFO': logging.INFO,
+                  'DEBUG': logging.DEBUG}
+
+    level_str = config.get('logging', 'level')
+    filename = config.get('logging', 'filename')
+
+    try:
+        level = levels_map[level_str]
+    except KeyError:
+        default = logging.INFO
+        print ('Unknown logging level %s, using default %s'
+               % (level_str, logging.getLevelName(default)))
+        level = default
+
+    if filename is None or filename == '':
+        filename = 'stdout'
+
+    if filename == 'stdout':
+        filepath = None
+    else:
+        filepath = os.path.join(get_app_dir(), filename)
+
+    print ("Openning log '%s' with level %s"
+           % (filepath if filepath else filename, logging.getLevelName(level)))
+
+    logging.basicConfig(level=level, filename=filepath)
 
 
 def async_function(fnc):
@@ -51,6 +80,8 @@ def async_function(fnc):
     Dekorator. Dekorovana funkce bude spustena v samostatnem vlakne a vracet
     bude t.i.d.Deferred.
     """
+    from twisted.internet import threads
+
     @functools.wraps(fnc)
     def wrapper(*args, **kwargs):
         return threads.deferToThread(fnc, *args, **kwargs)
