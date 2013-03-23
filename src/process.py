@@ -45,16 +45,17 @@ class ConversionProcess():
         args = shlex.split(conversion_command)
         executable = args[0]
 
-        stdout_log_fd = self.open_stdout_log()
-        stderr_log_fd = self.open_stderr_log()
+        self.open_stdout_log()
+        self.open_stderr_log()
 
-        fds_map = {0: 0,
-                   1: stdout_log_fd,
-                   2: stderr_log_fd}
+        proto = WatchingProcessProtocol(self.deferred)
 
-        self.process_protocol = proto = WatchingProcessProtocol(self.deferred)
-        self.process_transport = reactor.spawnProcess(proto, executable, args,
-                                                      childFDs=fds_map)
+        proto.outReceived = lambda data: self.stdout_log.write(data)
+        proto.errReceived = lambda data: self.stderr_log.write(data)
+
+        self.process_transport = reactor.spawnProcess(proto, executable, args)
+
+        self.process_protocol = proto
         self.pid = self.process_transport.pid
         self.started = True
 
