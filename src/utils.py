@@ -5,6 +5,18 @@ import functools
 from twisted.internet import protocol
 
 
+def encode(string):
+    import locale
+    encoding = locale.getpreferredencoding()
+    return string.encode(encoding)
+
+
+def decode(string):
+    import locale
+    encoding = locale.getpreferredencoding()
+    return string.decode(encoding)
+
+
 def singleton(cls):
     """
     Decorator. Create singleton from decorated class.

@@ -1,6 +1,5 @@
 # -*- coding: utf8 -*-
 
-import locale
 import logging
 import shlex
 import sys
@@ -9,7 +8,7 @@ import tempfile
 from twisted.internet import defer, error, reactor
 
 from config import Configuration
-from utils import WatchingProcessProtocol, async_function
+from utils import WatchingProcessProtocol, async_function, encode, decode
 
 
 class ConversionProcess():
@@ -41,6 +40,7 @@ class ConversionProcess():
         assert not self.started
 
         conversion_command = self.get_conversion_command()
+        conversion_command = encode(conversion_command)
 
         args = shlex.split(conversion_command)
         executable = args[0]
@@ -180,8 +180,7 @@ class ConversionProcess():
     def read_from_temp_file(self, temp_file):
         temp_file.seek(0)
         buff = temp_file.read()
-        encoding = locale.getpreferredencoding()
-        data = buff.decode(encoding)
+        data = decode(buff)
         return data
 
     def _get_psutil_process(self):

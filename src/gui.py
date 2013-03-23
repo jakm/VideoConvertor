@@ -8,7 +8,6 @@ from twisted.internet import gtk2reactor
 gtk2reactor.install()
 
 import logging
-import locale
 import os
 import os.path
 from datetime import datetime
@@ -18,7 +17,8 @@ from twisted.internet import defer, reactor
 from twisted.python import failure
 
 from config import Configuration
-from utils import get_install_dir, get_app_dir, setup_logging, async_function
+from utils import (get_install_dir, get_app_dir, setup_logging, async_function,
+                   encode)
 from process import ConversionProcess
 
 
@@ -659,7 +659,6 @@ Nekompletní úlohy:
 
     @async_function
     def write_error_log(self, log_name):
-        encoding = locale.getpreferredencoding()
 
         def format_task(task):
             return ('Task: input_file="%s", sub_file="%s", output_file="%s"'
@@ -677,7 +676,7 @@ Nekompletní úlohy:
             separator = '\n\n\n------------------------------------------\n\n\n'
             msg += separator.join(data)
 
-            f.write(msg.encode(encoding))
+            f.write(encode(msg))
 
         try:
             log_dir_path = os.path.join(get_app_dir(), 'log')
