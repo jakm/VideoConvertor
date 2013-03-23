@@ -42,6 +42,7 @@ def get_app_dir():
 def setup_logging():
     import logging
     import os.path
+    from twisted.python import log
     from config import Configuration
 
     config = Configuration()
@@ -68,6 +69,10 @@ def setup_logging():
         filepath = None
     else:
         filepath = os.path.join(get_app_dir(), filename)
+
+    # http://twistedmatrix.com/documents/current/core/howto/logging.html#auto3
+    observer = log.PythonLoggingObserver()
+    observer.start()
 
     print ("Openning log '%s' with level %s"
            % (filepath if filepath else filename, logging.getLevelName(level)))
