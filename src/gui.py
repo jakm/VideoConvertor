@@ -18,7 +18,7 @@ from twisted.python import failure
 
 from config import Configuration
 from utils import (get_install_dir, get_app_dir, setup_logging, async_function,
-                   encode)
+                   encode, cached_property)
 from process import ConversionProcess
 
 
@@ -102,41 +102,36 @@ class VideoConvertorGUI(object):
             self.show_info_dialog(msg)
             return True
 
-    def on_add_file_button_clicked(self, widget, *data):
+    @cached_property
+    def video_file_chooser(self):
         filter_ = gtk.FileFilter()
         filter_.set_name('Video soubory')
-        for extension in ('avi', 'mpg', 'mpeg', 'ogv', 'mkv', 'mov', 'mp4', 'vob', 'wmv'):
+        for extension in ('avi', 'mpg', 'mpeg', 'ogv', 'mkv', 'mov', 'mp4',
+                          'vob', 'wmv'):
             filter_.add_pattern('*.' + extension)
 
-        file_names = self.open_file_chooser_dialog('Video soubory ...',
-                                                   filters=(filter_,))
+        file_chooser = FileChooser(self.main_window, 'Video soubory ...',
+                                   filters=(filter_,))
+
+        return file_chooser
+
+    @cached_property
+    def subtitles_file_chooser(self):
+        filter_ = gtk.FileFilter()
+        filter_.set_name('Soubory titulků')
+        for extension in ('sub', 'srt', 'txt'):
+            filter_.add_pattern('*.' + extension)
+
+        file_chooser = FileChooser(self.main_window, 'Soubory titulků ...',
+                                   filters=(filter_,), select_multiple=False)
+
+        return file_chooser
+
+    def on_add_file_button_clicked(self, widget, *data):
+        file_names = self.video_file_chooser.open_dialog()
 
         for file_name in file_names:
             self.add_file_name(file_name)
-
-    def open_file_chooser_dialog(self, title, filters=(), select_multiple=True):
-        buttons = (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-                   gtk.STOCK_OPEN, gtk.RESPONSE_OK)
-
-        dialog = gtk.FileChooserDialog(title=title,
-                                       parent=self.main_window,
-                                       action=gtk.FILE_CHOOSER_ACTION_OPEN,
-                                       buttons=buttons,
-                                       backend=None)
-        dialog.set_default_response(gtk.RESPONSE_OK)
-        dialog.set_select_multiple(select_multiple)
-        for filter_ in filters:
-            dialog.set_filter(filter_)
-
-        try:
-            response = dialog.run()
-            if response != gtk.RESPONSE_OK:
-                return []
-
-            file_names = dialog.get_filenames()
-            return file_names
-        finally:
-            dialog.destroy()
 
     def add_file_name(self, file_name):
         self.logger.debug('Appending file: %s', file_name)
@@ -262,14 +257,7 @@ class VideoConvertorGUI(object):
         if len(rows) == 0:
             return
 
-        filter_ = gtk.FileFilter()
-        filter_.set_name('Soubory titulků')
-        for extension in ('sub', 'srt', 'txt'):
-            filter_.add_pattern('*.' + extension)
-
-        file_names = self.open_file_chooser_dialog('Soubory titulků ...',
-                                                   filters=(filter_,),
-                                                   select_multiple=False)
+        file_names = self.subtitles_file_chooser.open_dialog()
 
         if not file_names:
             return
@@ -696,6 +684,61 @@ Nekompletní úlohy:
         column_no = {'id': 0,  'file_path': 1, 'sub_path': 2, 'has_sub': 3,
                      'subpix': 4, 'running': 5}[column]
         return column_no
+
+
+class FileChooser(object):
+
+    _last_folder = os.path.expanduser('~')  # shared state, variable will be
+                                            # accessed by instance's properties
+
+    def __init__(self, parent, title, filters=(), select_multiple=True):
+        self.parent = parent
+        self.title = title
+        self.filters = filters
+        self.select_multiple = select_multiple
+
+    def open_dialog(self):
+        buttons = (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                   gtk.STOCK_OPEN, gtk.RESPONSE_OK)
+
+        dialog = gtk.FileChooserDialog(title=self.title,
+                                       parent=self.parent,
+                                       action=gtk.FILE_CHOOSER_ACTION_OPEN,
+                                       buttons=buttons,
+                                       backend=None)
+        dialog.set_default_response(gtk.RESPONSE_OK)
+        dialog.set_select_multiple(self.select_multiple)
+        for filter_ in self.filters:
+            dialog.set_filter(filter_)
+
+        if self.last_folder:
+            dialog.set_current_folder(self.last_folder)
+
+        try:
+            response = dialog.run()
+
+            if response != gtk.RESPONSE_OK:
+                return []
+
+            # user confirmed dialog
+
+            current_folder = dialog.get_current_folder()
+            if current_folder:
+                self.last_folder = current_folder
+
+            file_names = dialog.get_filenames()
+
+            return file_names
+        finally:
+            dialog.destroy()
+
+    @property
+    def last_folder(self):
+        return FileChooser._last_folder
+
+    @last_folder.setter
+    def last_folder(self, value):
+        FileChooser._last_folder = value
 
 
 class ErrorDialog(object):
