@@ -44,6 +44,7 @@ class VideoConvertorGUI(object):
         self.processes = set()
         self.conversion_running = False
         self.conversion_paused = False
+        self.conversion_cancelled = False
         self.tasks_done = []
         self.tasks_incomplete = []
         self.tasks_failed = []
@@ -399,8 +400,17 @@ class VideoConvertorGUI(object):
             yield self.set_conversion_running(False)
 
     def cancel_conversion(self):
-        self.stop_running_processes()
-        self.reset_tasks_queue()
+        self.conversion_cancelled = True
+
+        try:
+            # in this section we callback on processes's deferreds, it's
+            # callbacks need to know that conversion is cancelled, but we
+            # have to reset this state after clean, because we may want to
+            # start conversion again
+            self.stop_running_processes()
+            self.reset_tasks_queue()
+        finally:
+            self.conversion_cancelled = False
 
     def stop_running_processes(self):
         while True:
@@ -463,6 +473,9 @@ class VideoConvertorGUI(object):
             return dl
 
     def start_process(self):
+        if self.conversion_cancelled:
+            return
+
         if self.any_task_exists():
             task = self.get_top_task()
             self.logger.debug('Task: %s', task)
