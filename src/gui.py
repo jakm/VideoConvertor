@@ -570,12 +570,17 @@ class VideoConvertorGUI(object):
                           returncode)
 
         if returncode == 0:
-            is_complete = yield self.is_task_complete(task)
-            if is_complete:
-                self.tasks_done.append(task)
+            # FIXME: doesn't work on win32 platform
+            if sys.platform != 'win32':
+                is_complete = yield self.is_task_complete(task)
+
+                if is_complete:
+                    self.tasks_done.append(task)
+                else:
+                    self.logger.warning('Task %s seems be incomplete', task)
+                    self.tasks_incomplete.append(task)
             else:
-                self.logger.warning('Task %s seems be incomplete', task)
-                self.tasks_incomplete.append(task)
+                self.tasks_done.append(task)
         else:
             self.tasks_failed.append(task)
 
