@@ -4,8 +4,14 @@ import pygtk
 pygtk.require20()
 import gtk
 
-from twisted.internet import gtk2reactor
-gtk2reactor.install()
+import sys
+
+if sys.platform == 'win32':
+    import win32reactor
+    win32reactor.install()
+else:
+    from twisted.internet import gtk2reactor
+    gtk2reactor.install()
 
 import logging
 import os
