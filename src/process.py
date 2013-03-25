@@ -56,11 +56,11 @@ class ConversionProcess():
         self.logger.info('Starting conversion process of %s', self.input_file)
 
         kwargs = {}
-        
+
         if sys.platform == 'win32':
             import win32process
             kwargs['win32flags'] = win32process.CREATE_NO_WINDOW
-        
+
         self.process_transport = reactor.spawnProcess(proto, executable, args, **kwargs)
 
         self.process_protocol = proto

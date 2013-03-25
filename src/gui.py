@@ -17,26 +17,13 @@ import logging
 import os
 import os.path
 from datetime import datetime
-from decimal import Decimal
 
 from twisted.internet import defer, reactor
-from twisted.python import failure
 
 from config import Configuration
+from scheduler import Queue, Scheduler
 from utils import (get_install_dir, get_app_dir, setup_logging, async_function,
                    encode, cached_property)
-from process import ConversionProcess
-
-
-class Task(object):
-    input_file = None
-    sub_file = None
-    output_file = None
-    row_id = None
-    process = None
-
-    def __str__(self):
-        return "<Task '%s'>" % self.input_file
 
 
 class VideoConvertorGUI(object):
@@ -47,17 +34,12 @@ class VideoConvertorGUI(object):
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        self.processes = set()
-        self.conversion_running = False
-        self.conversion_paused = False
-        self.conversion_cancelled = False
-        self.tasks_done = []
-        self.tasks_incomplete = []
-        self.tasks_failed = []
-
         self.config = Configuration()
 
         self._init_ui()
+
+        self.tasks_queue = Queue(self.tasks_liststore)
+        self.scheduler = Scheduler(self.tasks_queue)
 
     def _init_ui(self):
         builder = gtk.Builder()
@@ -104,7 +86,7 @@ class VideoConvertorGUI(object):
         reactor.stop()
 
     def check_closing(self, widget, *data):
-        if self.conversion_running:
+        if self.scheduler.running:
             msg = 'Probíhá konverze! Před vypnutím aplikace ji ukončete.'
             self.show_info_dialog(msg)
             return True
@@ -149,7 +131,7 @@ class VideoConvertorGUI(object):
         self.last_row_id += 1
 
         datarow = (row_id, file_name, None, False, pixbuf, False)
-        self.tasks_liststore.append(datarow)
+        self.tasks_queue.append(datarow)
 
     def get_image_pixbuf(self, stock_id):
         image = gtk.Image()
@@ -177,7 +159,7 @@ class VideoConvertorGUI(object):
             yield self.set_rows_selected(not any_running)
 
     def has_files(self):
-        return (len(self.tasks_liststore) > 0)
+        return not self.tasks_queue.empty()
 
     @defer.inlineCallbacks
     def get_selected_paths(self):
@@ -203,7 +185,7 @@ class VideoConvertorGUI(object):
         if tree_paths is None:
             defer.returnValue([])
 
-        rows = [self.tasks_liststore[path] for path in tree_paths]
+        rows = [self.tasks_queue[path] for path in tree_paths]
 
         defer.returnValue(rows)
 
@@ -219,8 +201,6 @@ class VideoConvertorGUI(object):
 
     @defer.inlineCallbacks
     def set_conversion_running(self, set_running):
-        self.conversion_running = set_running
-
         if set_running:
             yield self.spinner.start()
         else:
@@ -239,23 +219,7 @@ class VideoConvertorGUI(object):
         for row in rows:
             self.logger.debug('Removing file: %s', row[column])
 
-            self.remove_row(row)
-
-    def remove_row(self, row_to_remove):
-        column = self._get_column_no('id')
-
-        id_to_remove = row_to_remove[column]
-
-        for i in range(len(self.tasks_liststore)):
-            path = (i,)
-
-            row = self.tasks_liststore[path]
-            row_id = row[column]
-
-            if row_id == id_to_remove:
-                iter_ = self.tasks_liststore.get_iter(path)
-                self.tasks_liststore.remove(iter_)
-                break
+            self.tasks_queue.remove(row)
 
     @defer.inlineCallbacks
     def on_add_subtitles_button_clicked(self, widget, *data):
@@ -369,8 +333,8 @@ class VideoConvertorGUI(object):
 
     @defer.inlineCallbacks
     def on_start_stop_button_clicked(self, widget, *data):
-        if not self.conversion_running:
-            if not self.any_task_exists():
+        if not self.scheduler.running:
+            if not self.scheduler.has_tasks():
                 self.show_info_dialog('Není naplánována žádná úloha')
                 return
 
@@ -378,13 +342,13 @@ class VideoConvertorGUI(object):
             yield self.start_conversion()
         else:
             self.logger.debug('Stopping conversion')
-            yield defer.succeed(self.cancel_conversion())
+            yield defer.succeed(self.scheduler.cancel())
 
     @defer.inlineCallbacks
     def on_pause_button_clicked(self, widget, *data):
-        assert self.conversion_running
+        assert self.scheduler.running
 
-        if not self.conversion_paused:
+        if not self.scheduler.paused:
             self.logger.debug('Pausing conversion')
             yield self.set_conversion_paused(True)
         else:
@@ -396,226 +360,29 @@ class VideoConvertorGUI(object):
         try:
             yield self.set_conversion_running(True)
 
-            self.reset_finished_tasks()
-
-            yield self.schedule_tasks()
+            yield self.scheduler.start()
 
             yield self.show_report_and_log_errors()
 
         finally:
             yield self.set_conversion_running(False)
 
-    def cancel_conversion(self):
-        self.conversion_cancelled = True
-
-        try:
-            # in this section we callback on processes's deferreds, it's
-            # callbacks need to know that conversion is cancelled, but we
-            # have to reset this state after clean, because we may want to
-            # start conversion again
-            self.stop_running_processes()
-            self.reset_tasks_queue()
-        finally:
-            self.conversion_cancelled = False
-
-    def stop_running_processes(self):
-        while True:
-            try:
-                process = self.processes.pop()
-                self.logger.debug('Terminating: %s', process)
-                process.terminate()
-            except KeyError:
-                break
-
-    def reset_tasks_queue(self):
-        column = self._get_column_no('running')
-
-        for row in iter(self.tasks_liststore):
-            row[column] = False
-
-    def reset_finished_tasks(self):
-        del self.tasks_done[:]
-        del self.tasks_failed[:]
-        del self.tasks_incomplete[:]
-
     @defer.inlineCallbacks
     def set_conversion_paused(self, set_paused):
-        self.conversion_paused = set_paused
-
         if set_paused:
             yield self.spinner.stop()
         else:
             yield self.spinner.start()
 
-        for process in self.processes:
-            if set_paused:
-                process.pause()
-            else:
-                process.resume()
-
-    @defer.inlineCallbacks
-    def resume_conversion(self):
-        yield self.spinner.start()
-        self.conversion_paused = False
-
-    def schedule_tasks(self):
-        if self.any_task_exists():
-            processes_count = self.config.getint('processes', 'count')
-            self.logger.debug('Count of processes to run: %s', processes_count)
-
-            defers = []
-            while len(self.processes) < processes_count:
-                d = self.start_process()
-
-                if d is None:
-                    break
-
-                defers.append(d)
-
-            if not defers:
-                return
-
-            dl = defer.DeferredList(defers)
-            return dl
-
-    def start_process(self):
-        if self.conversion_cancelled:
-            return
-
-        if self.any_task_exists():
-            task = self.get_top_task()
-            self.logger.debug('Task: %s', task)
-
-            if task is None:
-                return
-
-            process = ConversionProcess(task.input_file,
-                                        task.sub_file,
-                                        task.output_file)
-
-            self.logger.debug('Created new process object: %s', process)
-
-            process.run()
-            self.processes.add(process)
-
-            task.process = process
-
-            self.set_task_started(task)
-
-            process.deferred.addBoth(self.task_finished, task)
-            process.deferred.addBoth(lambda _: self.processes.remove(process))
-            process.deferred.addBoth(lambda _: self.start_process())
-
-            return process.deferred
-
-    def any_task_exists(self):
-        return (len(self.get_rows_not_running()) > 0)
-
-    def get_top_task(self):
-        rows = self.get_rows_not_running()
-
-        if len(rows) == 0:
-            return None
-
-        row = rows[0]
-
-        input_file_name = row[self._get_column_no('file_path')]
-        output_file_name = self.extend_file_name(input_file_name)
-
-        self.logger.debug('Input file: %s, output file: %s', input_file_name,
-                          output_file_name)
-
-        task = Task()
-        task.input_file = input_file_name
-        task.sub_file = row[self._get_column_no('sub_path')]
-        task.output_file = output_file_name
-        task.row_id = row[self._get_column_no('id')]
-
-        return task
-
-    def get_rows_not_running(self):
-        rows_not_running = []
-
-        column = self._get_column_no('running')
-        for row in iter(self.tasks_liststore):
-            if row[column] is not True:
-                rows_not_running.append(row)
-
-        return rows_not_running
-
-    def set_task_started(self, task):
-        column_running = self._get_column_no('running')
-        row = self.get_row_by_id(task.row_id)
-        row[column_running] = True
-
-    def get_row_by_id(self, row_id):
-        column_id = self._get_column_no('id')
-        for row in iter(self.tasks_liststore):
-            if row[column_id] == row_id:
-                return row
-
-        return None
-
-    @defer.inlineCallbacks
-    def task_finished(self, result, task):
-
-        cancelled = (isinstance(result, failure.Failure)
-                     and isinstance(result.value, defer.CancelledError))
-        if cancelled:
-            self.logger.debug('Task cancelled: %s', task)
-            defer.returnValue(None)
-
-        returncode = task.process.returncode
-        self.logger.debug('Task %s finished with return code: %s', task,
-                          returncode)
-
-        if returncode == 0:
-            # FIXME: doesn't work on win32 platform
-            if sys.platform != 'win32':
-                is_complete = yield self.is_task_complete(task)
-
-                if is_complete:
-                    self.tasks_done.append(task)
-                else:
-                    self.logger.warning('Task %s seems be incomplete', task)
-                    self.tasks_incomplete.append(task)
-            else:
-                self.tasks_done.append(task)
+        if set_paused:
+            self.scheduler.pause()
         else:
-            self.tasks_failed.append(task)
-
-        row = self.get_row_by_id(task.row_id)
-        self.remove_row(row)
-
-        defer.returnValue(result)
-
-    @async_function
-    def is_task_complete(self, task):
-        input_file_stat = os.stat(task.input_file)
-        output_file_stat = os.stat(task.output_file)
-
-        input_file_size = input_file_stat.st_size
-        output_file_size = output_file_stat.st_size
-
-        size_ratio = Decimal(output_file_size) / Decimal(input_file_size)
-
-        return (size_ratio > Decimal('0.5'))
-
-    def extend_file_name(self, file_name):
-        elements = file_name.split('.')
-        if len(elements) > 1:
-            new_file_name = '.'.join(elements[0:-1] + ['NEW'])
-        else:
-            new_file_name = '.'.join(elements + ['NEW'])
-
-        new_file_name += '.avi'
-
-        return new_file_name
+            self.scheduler.resume()
 
     @defer.inlineCallbacks
     def show_report_and_log_errors(self):
-        if not self.tasks_failed and not self.tasks_incomplete:
-            msg = 'Úspěšně dokončeno %d úloh.' % len(self.tasks_done)
+        if not self.scheduler.tasks_failed and not self.scheduler.tasks_incomplete:
+            msg = 'Úspěšně dokončeno %d úloh.' % len(self.scheduler.tasks_done)
             self.show_info_dialog(msg)
         else:
             error_log_name = 'MencoderErrors_%s.log' % datetime.now()
@@ -643,13 +410,13 @@ Nekompletní úlohy:
 '''
 
             tasks_failed = '\n'.join([task.input_file
-                                      for task in self.tasks_failed])
+                                      for task in self.scheduler.tasks_failed])
             tasks_incomplete = '\n'.join([task.input_file
-                                          for task in self.tasks_incomplete])
+                                          for task in self.scheduler.tasks_incomplete])
 
-            message = message_template % (len(self.tasks_done),
-                                          len(self.tasks_failed),
-                                          len(self.tasks_incomplete),
+            message = message_template % (len(self.scheduler.tasks_done),
+                                          len(self.scheduler.tasks_failed),
+                                          len(self.scheduler.tasks_incomplete),
                                           error_log_name,
                                           tasks_failed,
                                           tasks_incomplete)
@@ -698,8 +465,8 @@ Nekompletní úlohy:
                 os.mkdir(log_dir_path)
 
             with file(log_file_path, 'a') as f:
-                write_section(f, 'FAILED TASKS', self.tasks_failed)
-                write_section(f, 'INCOMPLETE TASKS', self.tasks_incomplete)
+                write_section(f, 'FAILED TASKS', self.scheduler.tasks_failed)
+                write_section(f, 'INCOMPLETE TASKS', self.scheduler.tasks_incomplete)
         except:
             import traceback
             self.logger.critical(traceback.format_exc())
