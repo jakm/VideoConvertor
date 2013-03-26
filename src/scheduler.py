@@ -7,6 +7,7 @@ import sys
 from decimal import Decimal
 
 from twisted.internet import defer
+from twisted.internet import task as tx_task
 from twisted.python import failure
 
 from config import Configuration
@@ -103,7 +104,18 @@ class Scheduler(object):
         self.tasks_incomplete = []
         self.tasks_failed = []
 
+        self.scheduler = tx_task.LoopingCall(self.schedule_tasks)
+        self.deferred = defer.Deferred()
+
         self.config = Configuration()
+
+        self.processes_count = self.config.getint('scheduler',
+                                                  'processes_count')
+        self.logger.debug('Count of processes to run: %s', self.processes_count)
+
+        self.scheduler_timeout = self.config.getint('scheduler',
+                                                    'scheduler_timeout')
+        self.logger.debug('Scheduler timeout: %s', self.scheduler_timeout)
 
     @property
     def running(self):
@@ -120,17 +132,27 @@ class Scheduler(object):
     def start(self):
         assert not self.running
 
-        self._cancelled = False  # reset previous state
         self._running = True
 
         self.reset_finished_tasks()
 
-        d = self.schedule_tasks()
+        self.logger.debug('Starting scheduler')
+        d = self.scheduler.start(self.scheduler_timeout)
 
-        def reset_scheduler(res):
+        def scheduler_stopped(res):
+            self.logger.debug('Scheduler stopped')
+
+            # reset previous state
             self._running = False
+            self._paused = False
+            self._cancelled = False
 
-        d.addBoth(reset_scheduler)
+            # set NEW deferred
+            d, self.deferred = self.deferred, defer.Deferred()
+
+            d.callback(None)
+
+        d.addBoth(scheduler_stopped)
 
         return d
 
@@ -143,6 +165,8 @@ class Scheduler(object):
         # callbacks need to know that conversion is cancelled
         self.stop_running_processes()
         self.reset_tasks_queue()
+
+        self.stop_scheduler()
 
     def pause(self):
         assert self.running
@@ -166,54 +190,59 @@ class Scheduler(object):
         del self.tasks_incomplete[:]
 
     def schedule_tasks(self):
-        if self.has_tasks():
-            processes_count = self.config.getint('processes', 'count')
-            self.logger.debug('Count of processes to run: %s', processes_count)
-
-            defers = []
-            while len(self.processes) < processes_count:
-                d = self.start_process()
-
-                if d is None:
-                    break
-
-                defers.append(d)
-
-            if not defers:
-                return
-
-            dl = defer.DeferredList(defers)
-            return dl
-
-    def start_process(self):
-        if self.cancelled:
+        if not self.running:
             return
 
-        if self.has_tasks():
+        if self.cancelled or self.paused:
+            return
+
+        if self.nothing_to_schedule():
+            self.stop_scheduler()
+            return
+
+        self.logger.debug('Schedule tasks')
+
+        def reschedule(res):
+            if self.running:
+                self.logger.debug('Reschedule immediately')
+                self.schedule_tasks()
+
+        while self.can_schedule_task():
             task = self.get_top_task()
             self.logger.debug('Task: %s', task)
 
-            if task is None:
-                return
+            d = self.start_process(task)
+            d.addBoth(reschedule)  # don't wait for timeout, schedule now
 
-            process = ConversionProcess(task.input_file,
-                                        task.sub_file,
-                                        task.output_file)
+    def nothing_to_schedule(self):
+        return len(self.processes) == 0 and not self.has_tasks()
 
-            self.logger.debug('Created new process object: %s', process)
+    def can_schedule_task(self):
+        return len(self.processes) < self.processes_count and self.has_tasks()
 
-            process.run()
-            self.processes.add(process)
+    def stop_scheduler(self):
+        if self.scheduler.running:
+            self.logger.debug('Stopping scheduler')
+            self.scheduler.stop()
 
-            task.process = process
+    def start_process(self, task):
+        process = ConversionProcess(task.input_file,
+                                    task.sub_file,
+                                    task.output_file)
 
-            self.set_task_started(task)
+        self.logger.debug('Created new process object: %s', process)
 
-            process.deferred.addBoth(self.task_finished, task)
-            process.deferred.addBoth(lambda _: self.processes.remove(process))
-            process.deferred.addBoth(lambda _: self.start_process())
+        process.run()
+        self.processes.add(process)
 
-            return process.deferred
+        task.process = process
+
+        self.set_task_started(task)
+
+        process.deferred.addBoth(self.task_finished, task)
+        process.deferred.addBoth(lambda _: self.processes.remove(process))
+
+        return process.deferred
 
     def has_tasks(self):
         return (len(self.get_rows_not_running()) > 0)
