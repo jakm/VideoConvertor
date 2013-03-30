@@ -22,8 +22,8 @@ from twisted.internet import defer, reactor
 
 from config import Configuration
 from scheduler import Queue, Scheduler
-from utils import (get_install_dir, get_app_dir, setup_logging, async_function,
-                   encode, cached_property)
+from utils import (get_install_dir, get_app_dir, get_version, setup_logging,
+                   async_function, encode, cached_property)
 
 
 class VideoConvertorGUI(object):
@@ -60,6 +60,14 @@ class VideoConvertorGUI(object):
         builder.connect_signals(signals)
 
         self._set_widget_objects(builder)
+
+        version = get_version()
+
+        title = 'Video Convertor'
+        if version:
+            title += (' v%s' % version)
+
+        self.main_window.set_title(title)
 
         self.main_window.connect('destroy', lambda widget, *data: self.close())
         self.main_window.connect('delete-event', self.check_closing)
