@@ -1,4 +1,7 @@
 # -*- coding: utf8 -*-
+"""
+Provides classes used to schedule tasks.
+"""
 
 import logging
 import os
@@ -16,6 +19,9 @@ from utils import async_function
 
 
 class Queue(object):
+    """
+    Wrapper around gtk.ListStore used in GUI.
+    """
     def __init__(self, liststore):
         self.liststore = liststore
 
@@ -51,6 +57,9 @@ class Queue(object):
 
 
 class QueueRow(object):
+    """
+    Wrapper around gtk.TreeModelRow used in GUI.
+    """
     column_map = {'id': 0,  'file_path': 1, 'sub_path': 2, 'has_sub': 3,
                   'subpix': 4, 'running': 5}
 
@@ -80,6 +89,9 @@ class QueueRow(object):
 
 
 class Task(object):
+    """
+    Simple structure that keeps information about running task.
+    """
     input_file = None
     sub_file = None
     output_file = None
@@ -91,7 +103,31 @@ class Task(object):
 
 
 class Scheduler(object):
+    """
+    Class that is scheduling tasks in queue and executing processes. Maximum
+    count of running processes is given by configuration. Next task is scheduled
+    in occurence of two types of events:
+    1. When some process is finished and count of running processes is lower
+       than maximum.
+    2. When timeout expires and count of running processes is lower than
+       maximum. This is useful when user add smaller amount of files than
+       available count to queue and ran conversion. And then added next files.
+       In this case scheduler check new files and schedule tasks.
+
+    When scheduler is selecting new task from queue, takes top row that is not
+    marked as running. Then new process is started and task is marked as runnig.
+    Task is removed from queue and according to status of process added to
+    tasks_done, tasks_incomplete or tasks_failed after finish of process.
+
+    Scheduler supports this operations: start, cancel, pause and resume. They
+    are propagated to running processes. State of of scheduler could be checked
+    by this properties: running, paused, cancelled.
+    """
     def __init__(self, tasks_queue):
+        """
+        Store queue of tasks and set object's attributes.
+        @param tasks_queue Queue, Queue of tasks
+        """
         self.tasks_queue = tasks_queue
 
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -130,6 +166,10 @@ class Scheduler(object):
         return self._cancelled
 
     def start(self):
+        """
+        Start scheduling of queue.
+        @return t.i.d.Deferred, None
+        """
         assert not self.running
 
         self._running = True
@@ -140,6 +180,10 @@ class Scheduler(object):
         d = self.scheduler.start(self.scheduler_timeout)
 
         def scheduler_stopped(res):
+            """
+            Called when LoopingCall is stopped. Reset scheduler state and
+            callback deferred.
+            """
             self.logger.debug('Scheduler stopped')
 
             # reset previous state
@@ -157,6 +201,9 @@ class Scheduler(object):
         return d
 
     def cancel(self):
+        """
+        Cancel scheduler and running processes. Reset queue to new processing.
+        """
         assert self.running
 
         self._cancelled = True
@@ -169,6 +216,9 @@ class Scheduler(object):
         self.stop_scheduler()
 
     def pause(self):
+        """
+        Pause scheduler and running processes.
+        """
         assert self.running
 
         self._paused = True
@@ -177,6 +227,9 @@ class Scheduler(object):
             process.pause()
 
     def resume(self):
+        """
+        Resume scheduler and paused processes.
+        """
         assert self.running
 
         self._paused = False
@@ -185,11 +238,21 @@ class Scheduler(object):
             process.resume()
 
     def reset_finished_tasks(self):
+        """
+        Clear lists with tasks marked as done, failed and incomplete.
+        """
         del self.tasks_done[:]
         del self.tasks_failed[:]
         del self.tasks_incomplete[:]
 
     def schedule_tasks(self):
+        """
+        Try to schedule tasks. If scheduler is not running or is cancelled or
+        paused quietly return back. If there is no task to schedule, stop
+        scheduler. Schedule so much tasks how much can, i.e. up to
+        maximum of processes. Add rescheduling callback to each started
+        process.
+        """
         if not self.running:
             return
 
@@ -203,6 +266,10 @@ class Scheduler(object):
         self.logger.debug('Schedule tasks')
 
         def reschedule(res):
+            """
+            Reschedule immediately after process was finished. When scheduler is
+            not running do nothing.
+            """
             if self.running:
                 self.logger.debug('Reschedule immediately')
                 self.schedule_tasks()
@@ -215,17 +282,34 @@ class Scheduler(object):
             d.addBoth(reschedule)  # don't wait for timeout, schedule now
 
     def nothing_to_schedule(self):
+        """
+        @return bool, True if we have no task to schedule nor running process,
+        otherwise False
+        """
         return len(self.processes) == 0 and not self.has_tasks()
 
     def can_schedule_task(self):
+        """
+        @return bool, True if we have tasks in queue and can start new
+        processes, otherwise False
+        """
         return len(self.processes) < self.processes_count and self.has_tasks()
 
     def stop_scheduler(self):
+        """
+        Stop scheduler when running.
+        """
         if self.scheduler.running:
             self.logger.debug('Stopping scheduler')
             self.scheduler.stop()
 
     def start_process(self, task):
+        """
+        Prepare process object, start it, add to set of processes and add
+        callbacks to clean.
+        @param task Task, Task to process
+        @return t.i.d.Deferred
+        """
         process = ConversionProcess(task.input_file,
                                     task.sub_file,
                                     task.output_file)
@@ -245,9 +329,16 @@ class Scheduler(object):
         return process.deferred
 
     def has_tasks(self):
+        """
+        @return bool, True queue contains (non running) tasks, otherwise False
+        """
         return (len(self.get_rows_not_running()) > 0)
 
     def get_top_task(self):
+        """
+        Return top task in queue that is not set as running.
+        @return Task
+        """
         rows = self.get_rows_not_running()
 
         if len(rows) == 0:
@@ -270,6 +361,11 @@ class Scheduler(object):
         return task
 
     def get_rows_not_running(self):
+        """
+        Return rows in queue that are not marked as running. Rows are sorted
+        from top to bottom.
+        @return list, List of rows (type QueueRow)
+        """
         rows_not_running = []
 
         for row in self.tasks_queue:
@@ -279,10 +375,19 @@ class Scheduler(object):
         return rows_not_running
 
     def set_task_started(self, task):
+        """
+        Mark task as running.
+        @param task Task
+        """
         row = self.get_row_by_id(task.row_id)
         row['running'] = True
 
     def get_row_by_id(self, row_id):
+        """
+        Find row in queue by its id. Return row or None if not found.
+        @param row_id int, ID of row
+        @return QueueRow or None, Row or None if not foud
+        """
         for row in iter(self.tasks_queue):
             if row['id'] == row_id:
                 return row
@@ -291,6 +396,13 @@ class Scheduler(object):
 
     @defer.inlineCallbacks
     def task_finished(self, result, task):
+        """
+        Callbacked when process is finished. If deferred has beed cancelled
+        return immediately. Otherwise get status of process and append task to
+        tasks_done, tasks_incomplete or tasks_failed. Remove task's row from
+        queue.
+        @return t.i.d.Deferred
+        """
 
         cancelled = (isinstance(result, failure.Failure)
                      and isinstance(result.value, defer.CancelledError))
@@ -324,6 +436,12 @@ class Scheduler(object):
 
     @async_function
     def is_task_complete(self, task):
+        """
+        Check if task is complete. When size of new file is lower than half of
+        original task were probably stopped early.
+        @param task Task
+        @return t.i.d.Deferred, bool
+        """
         input_file_stat = os.stat(task.input_file)
         output_file_stat = os.stat(task.output_file)
 
@@ -335,6 +453,12 @@ class Scheduler(object):
         return (size_ratio > Decimal('0.5'))
 
     def extend_file_name(self, file_name):
+        """
+        Extend file name by this pattern: <<some name>>.<<extension>> -->
+        <<some name>>.NEW.avi.
+        @param file_name str
+        @return str
+        """
         elements = file_name.split('.')
         if len(elements) > 1:
             new_file_name = '.'.join(elements[0:-1] + ['NEW'])
@@ -346,6 +470,7 @@ class Scheduler(object):
         return new_file_name
 
     def stop_running_processes(self):
+        "Stop every running process."
         while True:
             try:
                 process = self.processes.pop()
@@ -355,5 +480,8 @@ class Scheduler(object):
                 break
 
     def reset_tasks_queue(self):
+        """
+        Reset queue to new processing, i.e. mark running rows as non-running.
+        """
         for row in iter(self.tasks_queue):
             row['running'] = False

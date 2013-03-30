@@ -1,4 +1,7 @@
 # -*- coding: utf8 -*-
+"""
+Provides GtkWin32Reactor class used on win32 platform.
+"""
 
 from twisted.internet import gtk2reactor
 from twisted.internet.posixbase import win32process
@@ -29,6 +32,10 @@ from twisted.internet._baseprocess import BaseProcess
 
 
 class GtkWin32Reactor(gtk2reactor.PortableGtkReactor):
+    """
+    GtkReactor for Windows. Allows call spawnProcess with win32flags.
+    It is useful when executing console application with CREATE_NO_WINDOW flag.
+    """
     _wakerFactory = gtk2reactor.PortableGtkReactor._wakerFactory
 
     def __init__(self, useGtk=True):

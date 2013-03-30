@@ -1,4 +1,7 @@
 # -*- coding: utf8 -*-
+"""
+Provides class implementing conversion process.
+"""
 
 import logging
 import shlex
@@ -12,7 +15,26 @@ from utils import WatchingProcessProtocol, async_function, encode, decode
 
 
 class ConversionProcess():
+    """
+    Class impolementing conversion process. Run command defined in application's
+    configuration file and control it. When process is finished unexpectedly,
+    log its returncode and stderr and stdout.
+
+    State of process coluld be checked by this properties: started, finished,
+    paused, cancelled, pid. When process is finished its status is in additional
+    properties: returncode, stderr, stdout.
+
+    Process support this operations: run, terminate, pause, resume.
+    """
     def __init__(self, input_file, sub_file, output_file, log_stdout=False):
+        """
+        Store information about input and output files and subtitles. Store if
+        log stdout and set object's attributes.
+        @param input_file str, Path to input file
+        @param sub_file str, Path to subtitles file
+        @param output_file str, Path to output file
+        @param log_stdout bool, Store stdout after process finish
+        """
         self.input_file = input_file
         self.sub_file = sub_file
         self.output_file = output_file
@@ -37,6 +59,10 @@ class ConversionProcess():
         self.stdout = None
 
     def run(self):
+        """
+        Star conversion process.
+        @return t.i.d.Deferred
+        """
         assert not self.started
 
         conversion_command = self.get_conversion_command()
@@ -70,6 +96,10 @@ class ConversionProcess():
         return self.deferred
 
     def terminate(self):
+        """
+        Terminate running process. It means terminate OS's process and cancel
+        deferred.
+        """
         if self.finished:
             return
 
@@ -83,6 +113,9 @@ class ConversionProcess():
         self.deferred.cancel()
 
     def pause(self):
+        """
+        Pause process running.
+        """
         assert self.started
         assert not self.finished
         assert not self.paused
@@ -95,6 +128,9 @@ class ConversionProcess():
             self.logger.debug('psutil process is None')
 
     def resume(self):
+        """
+        Resume paused process.
+        """
         assert self.started
         assert not self.finished
         assert self.paused
@@ -108,6 +144,11 @@ class ConversionProcess():
             self.logger.debug('psutil process is None')
 
     def get_conversion_command(self):
+        """
+        Make conversion command from patterns in application's config file and
+        process's attributes.
+        @return str, Conversion command to execute
+        """
         if sys.platform in ('win32', 'cygwin'):
             convertor_exe = self.config.get('command', 'convertor_exe_win')
         else:
@@ -134,6 +175,14 @@ class ConversionProcess():
         return conversion_command
 
     def extend_command_by_sub(self, sub_file, conversion_command):
+        """
+        Expand command's alias for subtitles with params or nothing
+        if subtitles are not requested.
+        @param sub_file str, Path of subtitles file
+        @param conversion_command str, Command without expanded alias for
+            subtitles
+        @return str, Expanded command
+        """
         sub_params = ''
         if sub_file:
             sub_file_alias = self.config.get('command', 'subtitle_file_alias')
@@ -146,15 +195,30 @@ class ConversionProcess():
         return conversion_command
 
     def open_stderr_log(self):
+        """
+        Open temporary file to write stderr of process.
+        @return int, FD of file
+        """
         self.stderr_log = tempfile.TemporaryFile()
         return self.stderr_log.fileno()
 
     def open_stdout_log(self):
+        """
+        Open temporary file to write stdout of process.
+        @return int, FD of file
+        """
         self.stdout_log = tempfile.TemporaryFile()
         return self.stdout_log.fileno()
 
     @defer.inlineCallbacks
     def process_exited(self, failure):
+        """
+        Callbacked when OS's process is finished. Set status finished, store
+        returncode and process's logs.
+        @param failure t.p.f.Failure, t.i.e.ProcessDone or
+            t.i.e.ProcessTerminated
+        @return t.i.d.Deferred
+        """
         self.finished = True
 
         status_type = failure.trap(error.ProcessDone, error.ProcessTerminated)
@@ -183,9 +247,14 @@ class ConversionProcess():
             self.stderr_log.close()
 
     @async_function
-    def read_from_temp_file(self, temp_file):
-        temp_file.seek(0)
-        buff = temp_file.read()
+    def read_from_temp_file(self, log_file):
+        """
+        Read data from log of process.
+        @param log_file str, Path to file with log
+        @return t.i.d.Deferred, str
+        """
+        log_file.seek(0)
+        buff = log_file.read()
         data = decode(buff)
         return data
 
