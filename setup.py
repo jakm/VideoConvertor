@@ -11,7 +11,7 @@ import os
 import os.path
 import sys
 
-VERSION = '2.2'
+VERSION = '2.3'
 
 # platform dependend options
 if sys.platform == 'win32':
