@@ -450,7 +450,7 @@ class Scheduler(object):
 
         size_ratio = Decimal(output_file_size) / Decimal(input_file_size)
 
-        return (size_ratio > Decimal('0.5'))
+        return (size_ratio > Decimal('0.3'))
 
     def extend_file_name(self, file_name):
         """
