@@ -33,7 +33,7 @@ from twisted.internet._baseprocess import BaseProcess
 
 class GtkWin32Reactor(gtk2reactor.PortableGtkReactor):
     """
-    GtkReactor for Windows. Allows call spawnProcess with win32flags.
+    GtkReactor for Windows. Allows calling of spawnProcess with win32flags.
     It is useful when executing console application with CREATE_NO_WINDOW flag.
     """
     _wakerFactory = gtk2reactor.PortableGtkReactor._wakerFactory
@@ -206,7 +206,7 @@ class Win32Process(_dumbwin32proc.Process):
 
 def install(useGtk=True):
     """
-    Configure the twisted mainloop to be run inside the gtk mainloop.
+    Configure the twisted mainloop to run inside the gtk mainloop.
 
     @param useGtk: should glib rather than GTK+ event loop be
         used (this will be slightly faster but does not support GUI).
